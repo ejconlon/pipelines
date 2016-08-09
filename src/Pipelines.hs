@@ -8,6 +8,7 @@ module Pipelines where
 
 -- import Control.Lens
 import Control.Monad (forM_)
+import Control.Monad.Base
 import Control.Monad.Catch
 import Control.Monad.IO.Class
 import Control.Monad.Reader
@@ -62,7 +63,7 @@ data PlanState = PlanState
 initialPlanState :: PlanState
 initialPlanState = PlanState [] StartPos
 
-type MonadPlan m = (MonadIO m, MonadCatch m, MonadReader Plan m, MonadState PlanState m)
+type MonadPlan b m = (MonadBase b m, MonadReader Plan m, MonadState PlanState m)
 
 lookupTask :: Name -> [Task] -> Maybe Task
 lookupTask _ [] = Nothing
@@ -79,13 +80,13 @@ nextTaskAfter _ [_] = Nothing
 nextTaskAfter n (s:t:ss) | n == _taskName s = Just t
                          | otherwise = nextTaskAfter n (t:ss)
 
-isEmpty :: MonadPlan m => m Bool
+isEmpty :: MonadPlan IO m => m Bool
 isEmpty = null <$> asks _planTasks
 
-isDone :: MonadPlan m => m Bool
+isDone :: MonadPlan IO m => m Bool
 isDone = (\p -> p == EndPos || p == FailPos) <$> gets _planStatePosition
 
-advancePosition :: MonadPlan m => m ()
+advancePosition :: MonadPlan IO m => m ()
 advancePosition = do
   tasks <- asks _planTasks
   loop <- asks _planLoop
@@ -103,14 +104,14 @@ advancePosition = do
     FailPos -> return ()
 
 -- Advance StartPos to the next task
-normalizePosition :: MonadPlan m => m ()
+normalizePosition :: MonadPlan IO m => m ()
 normalizePosition = do
   position <- gets _planStatePosition
   case position of
     StartPos -> advancePosition
     _ -> return ()
 
-currentTask :: MonadPlan m => m (Maybe Task)
+currentTask :: MonadPlan IO m => m (Maybe Task)
 currentTask = do
   tasks <- asks _planTasks
   position <- gets _planStatePosition
@@ -121,9 +122,9 @@ currentTask = do
 
 type Runner n = Task -> n History
 
-runTask :: MonadPlan m => Runner IO -> Task -> m History
+runTask :: MonadPlan IO m => Runner IO -> Task -> m History
 runTask runner task = do
-  history <- liftIO $ runner task
+  history <- liftBase $ runner task
   let name = _taskName task
       result = _historyResult history
   modify (\s -> s { _planStateHistory = history : (_planStateHistory s) })
@@ -132,7 +133,7 @@ runTask runner task = do
     OkResult -> advancePosition
   return history
 
-step :: MonadPlan m => Runner IO -> m (Maybe History)
+step :: MonadPlan IO m => Runner IO -> m (Maybe History)
 step runner = do
   normalizePosition
   task <- currentTask
@@ -140,7 +141,7 @@ step runner = do
 
 type Evaluator m n = forall a. m a -> Plan -> PlanState -> n (a, PlanState)
 
-subWalk :: MonadPlan m => Runner IO -> Evaluator m IO -> Plan -> PlanState -> IO (Step IO History)
+subWalk :: MonadPlan IO m => Runner IO -> Evaluator m IO -> Plan -> PlanState -> IO (Step IO History)
 subWalk runner evaluator plan planState = do
   (done, state') <- evaluator isDone plan planState
   if done
@@ -151,13 +152,13 @@ subWalk runner evaluator plan planState = do
         Just h -> return $ Cons h (walk runner evaluator plan state'')
         Nothing -> return Nil
 
-walk :: MonadPlan m => Runner IO -> Evaluator m IO -> Plan -> PlanState -> ListT IO History
+walk :: MonadPlan IO m => Runner IO -> Evaluator m IO -> Plan -> PlanState -> ListT IO History
 walk runner evaluator plan planState = ListT $ subWalk runner evaluator plan planState
 
 newtype PlanT a = PlanT
   { unPlanT :: ReaderT Plan (StateT PlanState IO) a }
   deriving (Functor, Applicative, Monad, MonadReader Plan,
-            MonadState PlanState, MonadIO, MonadThrow, MonadCatch)
+            MonadState PlanState, MonadIO, MonadBase IO)
 
 -- runPlanT :: PlanT a -> Plan -> PlanState -> IO (a, PlanState)
 runPlanT :: Evaluator PlanT IO
