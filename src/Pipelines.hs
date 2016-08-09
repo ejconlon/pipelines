@@ -4,15 +4,12 @@
 {-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE TupleSections #-}
 
-module Lib
-    ( someFunc
-    ) where
+module Pipelines where
 
 -- import Control.Lens
 import Control.Monad (forM_)
 import Control.Monad.Catch
 import Control.Monad.IO.Class
-import Control.Monad.Loops (untilM)
 import Control.Monad.Reader
 import Control.Monad.State
 import Data.UUID (UUID)
@@ -173,6 +170,3 @@ runPlanT (PlanT x) = runStateT . runReaderT x
 
 unfoldPlan :: Plan -> ListT IO History
 unfoldPlan plan = walk runPlanT plan initialPlanState
-
-someFunc :: IO ()
-someFunc = putStrLn "someFunc"
