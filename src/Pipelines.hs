@@ -13,7 +13,6 @@ import Control.Monad.IO.Class
 import Control.Monad.Reader
 import Control.Monad.State
 import Data.UUID (UUID)
-import Data.UUID.V4 (nextRandom)
 import List.Transformer
 -- import Options.Applicative
 -- import System.FilePath
@@ -46,7 +45,6 @@ data Loop
 data Plan = Plan
   { _planTasks   :: [Task]
   , _planLoop    :: Loop
-  , _planWorkdir :: FilePath
   } deriving (Show, Eq)
 
 data Position =
@@ -121,43 +119,40 @@ currentTask = do
              TaskPos n -> lookupTask n tasks
              EndPos -> Nothing
 
-runTaskIO :: Task -> FilePath -> UUID -> IO Result
-runTaskIO = undefined
+type Runner n = Task -> n History
 
-runTask :: MonadPlan m => Task -> m History
-runTask task = do
-  workdir <- asks _planWorkdir
-  uuid <- liftIO nextRandom
-  result <- liftIO $ runTaskIO task workdir uuid
+runTask :: MonadPlan m => Runner IO -> Task -> m History
+runTask runner task = do
+  history <- liftIO $ runner task
   let name = _taskName task
-      history = History name uuid result
+      result = _historyResult history
   modify (\s -> s { _planStateHistory = history : (_planStateHistory s) })
   case result of
     FailResult -> modify (\s -> s { _planStatePosition = FailPos })
     OkResult -> advancePosition
   return history
 
-step :: MonadPlan m => m (Maybe History)
-step = do
+step :: MonadPlan m => Runner IO -> m (Maybe History)
+step runner = do
   normalizePosition
   task <- currentTask
-  forM task runTask
+  forM task $ runTask runner
 
 type Evaluator m n = forall a. m a -> Plan -> PlanState -> n (a, PlanState)
 
-subWalk :: (Monad n, MonadPlan m) => Evaluator m n -> Plan -> PlanState -> n (Step n History)
-subWalk evaluator plan planState = do
+subWalk :: MonadPlan m => Runner IO -> Evaluator m IO -> Plan -> PlanState -> IO (Step IO History)
+subWalk runner evaluator plan planState = do
   (done, state') <- evaluator isDone plan planState
   if done
     then return Nil
     else do
-      (mh, state'') <- evaluator step plan state'
+      (mh, state'') <- evaluator (step runner) plan state'
       case mh of
-        Just h -> return $ Cons h (walk evaluator plan state'')
+        Just h -> return $ Cons h (walk runner evaluator plan state'')
         Nothing -> return Nil
 
-walk :: (Monad n, MonadPlan m) => Evaluator m n -> Plan -> PlanState -> ListT n History
-walk evaluator plan planState = ListT $ subWalk evaluator plan planState
+walk :: MonadPlan m => Runner IO -> Evaluator m IO -> Plan -> PlanState -> ListT IO History
+walk runner evaluator plan planState = ListT $ subWalk runner evaluator plan planState
 
 newtype PlanT a = PlanT
   { unPlanT :: ReaderT Plan (StateT PlanState IO) a }
@@ -168,5 +163,5 @@ newtype PlanT a = PlanT
 runPlanT :: Evaluator PlanT IO
 runPlanT (PlanT x) = runStateT . runReaderT x
 
-unfoldPlan :: Plan -> ListT IO History
-unfoldPlan plan = walk runPlanT plan initialPlanState
+unfoldPlan :: Runner IO -> Plan -> ListT IO History
+unfoldPlan runner plan = walk runner runPlanT plan initialPlanState
