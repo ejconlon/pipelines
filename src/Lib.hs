@@ -14,9 +14,9 @@ import Control.Monad.IO.Class
 import Control.Monad.Loops (untilM)
 import Control.Monad.Reader
 import Control.Monad.State
-import Data.Conduit
 import Data.UUID (UUID)
 import Data.UUID.V4 (nextRandom)
+import List.Transformer
 -- import Options.Applicative
 -- import System.FilePath
 -- import Turtle
@@ -139,22 +139,34 @@ runTask task = do
     OkResult -> advancePosition
   return history
 
-newtype ConcretePlan a = ConcretePlan
-  { unConcretePlan :: ReaderT Plan (StateT PlanState IO) a }
-  deriving (Functor, Applicative, Monad, MonadReader Plan,
-            MonadState PlanState, MonadIO, MonadThrow, MonadCatch)
-
-runConcretePlan :: ConcretePlan a -> Plan -> PlanState -> IO (a, PlanState)
-runConcretePlan (ConcretePlan x) = runStateT . runReaderT x
-
--- unfoldPlan :: Plan -> Source IO History
--- TODO
-
 step :: MonadPlan m => m (Maybe History)
 step = do
   normalizePosition
   task <- currentTask
   forM task runTask
+
+subWalk :: MonadPlan m => m (Step m History)
+subWalk = do
+  done <- isDone
+  if done
+    then return Nil
+    else do
+      mh <- step
+      case mh of
+        Just h -> return $ Cons h walk
+        Nothing -> return Nil
+
+walk :: MonadPlan m => ListT m History
+walk = ListT subWalk
+
+newtype PlanT a = PlanT
+  { unPlanT :: ReaderT Plan (StateT PlanState IO) a }
+  deriving (Functor, Applicative, Monad, MonadReader Plan,
+            MonadState PlanState, MonadIO, MonadThrow, MonadCatch)
+
+runPlanT :: PlanT a -> Plan -> PlanState -> IO (a, PlanState)
+runPlanT (PlanT x) = runStateT . runReaderT x
+
 
 someFunc :: IO ()
 someFunc = putStrLn "someFunc"

@@ -16,11 +16,11 @@ library
   hs-source-dirs:      src
   exposed-modules:     Lib
   build-depends:       base >= 4.7 && < 5
-                     , conduit
                      , exceptions
                      , filepath
                      , fsnotify
                      , lens
+                     , list-transformer
                      , optparse-applicative
                      , monad-loops
                      , mtl
