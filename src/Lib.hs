@@ -1,18 +1,20 @@
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE TupleSections #-}
 
 module Lib
     ( someFunc
     ) where
 
-
 -- import Control.Lens
 import Control.Monad (forM_)
 import Control.Monad.Catch
 import Control.Monad.IO.Class
+import Control.Monad.Loops (untilM)
 import Control.Monad.Reader
 import Control.Monad.State
+import Data.Conduit
 import Data.UUID (UUID)
 import Data.UUID.V4 (nextRandom)
 -- import Options.Applicative
@@ -61,6 +63,9 @@ data PlanState = PlanState
   , _planStatePosition :: Position
   } deriving (Show, Eq)
 
+initialPlanState :: PlanState
+initialPlanState = PlanState [] StartPos
+
 type MonadPlan m = (MonadIO m, MonadCatch m, MonadReader Plan m, MonadState PlanState m)
 
 lookupTask :: Name -> [Task] -> Maybe Task
@@ -82,7 +87,7 @@ isEmpty :: MonadPlan m => m Bool
 isEmpty = null <$> asks _planTasks
 
 isDone :: MonadPlan m => m Bool
-isDone = (EndPos ==) <$> gets _planStatePosition
+isDone = (\p -> p == EndPos || p == FailPos) <$> gets _planStatePosition
 
 advancePosition :: MonadPlan m => m ()
 advancePosition = do
@@ -121,7 +126,7 @@ currentTask = do
 runTaskIO :: Task -> FilePath -> UUID -> IO Result
 runTaskIO = undefined
 
-runTask :: MonadPlan m => Task -> m ()
+runTask :: MonadPlan m => Task -> m History
 runTask task = do
   workdir <- asks _planWorkdir
   uuid <- liftIO nextRandom
@@ -132,15 +137,24 @@ runTask task = do
   case result of
     FailResult -> modify (\s -> s { _planStatePosition = FailPos })
     OkResult -> advancePosition
+  return history
+
+newtype ConcretePlan a = ConcretePlan
+  { unConcretePlan :: ReaderT Plan (StateT PlanState IO) a }
+  deriving (Functor, Applicative, Monad, MonadReader Plan,
+            MonadState PlanState, MonadIO, MonadThrow, MonadCatch)
+
+runConcretePlan :: ConcretePlan a -> Plan -> PlanState -> IO (a, PlanState)
+runConcretePlan (ConcretePlan x) = runStateT . runReaderT x
 
 -- unfoldPlan :: Plan -> Source IO History
--- unfoldPlan = undefined
+-- TODO
 
-step :: MonadPlan m => m ()
+step :: MonadPlan m => m (Maybe History)
 step = do
   normalizePosition
   task <- currentTask
-  forM_ task runTask
+  forM task runTask
 
 someFunc :: IO ()
 someFunc = putStrLn "someFunc"
