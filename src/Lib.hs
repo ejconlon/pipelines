@@ -1,6 +1,7 @@
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE TupleSections #-}
 
 module Lib
@@ -145,28 +146,33 @@ step = do
   task <- currentTask
   forM task runTask
 
-subWalk :: MonadPlan m => m (Step m History)
-subWalk = do
-  done <- isDone
+type Evaluator m n = forall a. m a -> Plan -> PlanState -> n (a, PlanState)
+
+subWalk :: (Monad n, MonadPlan m) => Evaluator m n -> Plan -> PlanState -> n (Step n History)
+subWalk evaluator plan planState = do
+  (done, state') <- evaluator isDone plan planState
   if done
     then return Nil
     else do
-      mh <- step
+      (mh, state'') <- evaluator step plan state'
       case mh of
-        Just h -> return $ Cons h walk
+        Just h -> return $ Cons h (walk evaluator plan state'')
         Nothing -> return Nil
 
-walk :: MonadPlan m => ListT m History
-walk = ListT subWalk
+walk :: (Monad n, MonadPlan m) => Evaluator m n -> Plan -> PlanState -> ListT n History
+walk evaluator plan planState = ListT $ subWalk evaluator plan planState
 
 newtype PlanT a = PlanT
   { unPlanT :: ReaderT Plan (StateT PlanState IO) a }
   deriving (Functor, Applicative, Monad, MonadReader Plan,
             MonadState PlanState, MonadIO, MonadThrow, MonadCatch)
 
-runPlanT :: PlanT a -> Plan -> PlanState -> IO (a, PlanState)
+-- runPlanT :: PlanT a -> Plan -> PlanState -> IO (a, PlanState)
+runPlanT :: Evaluator PlanT IO
 runPlanT (PlanT x) = runStateT . runReaderT x
 
+unfoldPlan :: Plan -> ListT IO History
+unfoldPlan plan = walk runPlanT plan initialPlanState
 
 someFunc :: IO ()
 someFunc = putStrLn "someFunc"
