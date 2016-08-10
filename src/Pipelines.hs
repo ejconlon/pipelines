@@ -6,9 +6,9 @@
 {-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE TupleSections #-}
 
+-- | Utilities to define and run pipelines of tasks.
 module Pipelines
   ( Name
-  , Timeout
   , Action
   , Interval
   , Result(..)
@@ -21,7 +21,6 @@ module Pipelines
   , executePlan
   ) where
 
--- import Control.Lens
 import Control.Monad (forM_)
 import Control.Monad.Base
 import Control.Monad.Catch
@@ -30,40 +29,50 @@ import Control.Monad.Reader
 import Control.Monad.State
 import Data.UUID (UUID)
 import List.Transformer
--- import Options.Applicative
--- import System.FilePath
--- import Turtle
 
-type Name     = String
-type Timeout  = String
-type Action   = String
+-- TODO(eric) better types for these:
+
+-- | A stringy identifier for a Plan or a Task
+type Name = String
+
+-- | A stringy identifier for a Task's action in the world
+type Action = String
+
+-- | A duration for which we can set Task timeouts
 type Interval = Int
 
+-- | The Result of running a Task
+-- TODO(eric) more info (esp on failure) and possibly a retry state
 data Result = OkResult | FailResult deriving (Show, Eq)
 
+-- | Relevant information about the completed execution of a Task
 data History = History
   { _historyName   :: Name
   , _historyUuid   :: UUID
   , _historyResult :: Result
   } deriving (Show, Eq)
 
+-- | A named unit of work
 data Task = Task
   { _taskName    :: Name
   , _taskAction  :: Action
   , _taskTimeout :: Interval
   } deriving (Show, Eq)
 
+-- | Indicates whether a Plan should loop forever or stop
 data Loop
   = StopLoop
   | ContinueLoop
   deriving (Show, Eq)
 
+-- | A sequence of tasks
 data Plan = Plan
   { _planName  :: Name
   , _planTasks :: [Task]
   , _planLoop  :: Loop
   } deriving (Show, Eq)
 
+-- | Our position in a Plan's list of Tasks
 data Position =
     StartPos
   | TaskPos Name
@@ -71,43 +80,56 @@ data Position =
   | FailPos
   deriving (Show, Eq)
 
+-- | State relevant to the execution of a task
 data PlanState = PlanState
   { _planStateHistory :: [History]  -- as a stack (most recent first)
   , _planStatePosition :: Position
   } deriving (Show, Eq)
 
+-- | The default plan state: no history and at starting position
 initialPlanState :: PlanState
 initialPlanState = PlanState [] StartPos
 
+-- | The thing that actually runs tasks.
+-- Given a plan name and a stack of task results,
+-- runs a plan and returns a result in context.
+-- Newtype this to control how tasks are run:
+-- A real implementation might work in IO over the filesystem.
+-- An implementation for tests might work over State and yield fake history.
 class Monad b => MonadRunner b where
-  -- Given a plan name and a stack of task results,
-  -- runs a plan and returns a result in context
   runner :: Name -> [History] -> Task -> b History
 
+-- | A typeclass to wrangle our Plan operations
 type MonadPlan b m = (MonadRunner b, MonadBase b m,
                       MonadReader Plan m, MonadState PlanState m)
 
+-- | Finds a Task by name
 lookupTask :: Name -> [Task] -> Maybe Task
 lookupTask _ [] = Nothing
 lookupTask n (s:ss) | n == _taskName s = Just s
                     | otherwise = lookupTask n ss
 
+-- | Don't need to import safe, so we'll just define this here -_-
 headOption :: [a] -> Maybe a
 headOption [] = Nothing
 headOption (a:_) = Just a
 
+-- | Finds the next task
 nextTaskAfter :: Name -> [Task] -> Maybe Task
 nextTaskAfter _ [] = Nothing
 nextTaskAfter _ [_] = Nothing
 nextTaskAfter n (s:t:ss) | n == _taskName s = Just t
                          | otherwise = nextTaskAfter n (t:ss)
 
+-- | Are there any tasks in this Plan?
 isEmpty :: MonadPlan b m => m Bool
 isEmpty = null <$> asks _planTasks
 
+-- | Is this Plan failed or finished?
 isDone :: MonadPlan b m => m Bool
 isDone = (\p -> p == EndPos || p == FailPos) <$> gets _planStatePosition
 
+-- | Updates our state to point to the next Task to be run
 advancePosition :: MonadPlan b m => m ()
 advancePosition = do
   tasks <- asks _planTasks
@@ -132,7 +154,7 @@ advancePosition = do
             else modify (\s -> s { _planStatePosition = StartPos }) >> advancePosition
     FailPos -> return ()
 
--- Advance StartPos to the next task
+-- | Handles default state: advances StartPos to the next task
 normalizePosition :: MonadPlan b m => m ()
 normalizePosition = do
   position <- gets _planStatePosition
@@ -140,6 +162,7 @@ normalizePosition = do
     StartPos -> advancePosition
     _ -> return ()
 
+-- | Finds the current task
 currentTask :: MonadPlan b m => m (Maybe Task)
 currentTask = do
   tasks <- asks _planTasks
@@ -149,8 +172,7 @@ currentTask = do
              TaskPos n -> lookupTask n tasks
              EndPos -> Nothing
 
-type Runner b = Task -> b History
-
+-- | Runs the given Task and updates state
 runTask :: MonadPlan b m => Task -> m History
 runTask task = do
   name <- asks _planName
@@ -162,12 +184,14 @@ runTask task = do
     OkResult -> advancePosition
   return history
 
+-- | Runs the next Task and updates state
 step :: MonadPlan b m => m (Maybe History)
 step = do
   normalizePosition
   task <- currentTask
   forM task runTask
 
+-- | A list of Task-execution actions
 walk :: MonadPlan b m => ListT m History
 walk = ListT $ do
   done <- isDone
@@ -179,20 +203,25 @@ walk = ListT $ do
         Just h -> return $ Cons h walk
         Nothing -> return Nil
 
+-- | A concrete interpretation of `MonadPlan`
 newtype PlanT b a = PlanT
   { unPlanT :: ReaderT Plan (StateT PlanState b) a }
   deriving (Functor, Applicative, Monad, MonadReader Plan,
             MonadState PlanState)
 
+-- | Monad boilerplate
 instance MonadTrans PlanT where
   lift = PlanT . lift . lift
 
+-- | Monad boilerplate
 instance Monad b => MonadBase b (PlanT b) where
   liftBase = lift
 
+-- | Monad boilerplate
 runPlanT :: PlanT b a -> Plan -> PlanState -> b (a, PlanState)
 runPlanT (PlanT x) = runStateT . runReaderT x
 
+-- | Projects `PlanT b` actions in the list transformer to the base monad
 listPlanT :: Monad b => ListT (PlanT b) a -> Plan -> PlanState -> ListT b a
 listPlanT (ListT mStep) plan state = ListT $ do
   (step, state') <- runPlanT mStep plan state
@@ -200,9 +229,11 @@ listPlanT (ListT mStep) plan state = ListT $ do
              Nil -> Nil
              Cons a rest -> Cons a $ listPlanT rest plan state'
 
+-- | Unfold a Plan into a sequence of Task-execution actions that yield History
 unfoldPlan :: MonadRunner b => Plan -> ListT b History
 unfoldPlan plan = listPlanT walk plan initialPlanState
 
+-- | Take at most `n` elements from the ListT (blocks and returns all `n` at once)
 takeListT :: Monad b => Int -> ListT b a -> b [a]
 takeListT n (ListT mStep) =
   if n <= 0
@@ -213,10 +244,10 @@ takeListT n (ListT mStep) =
         Nil -> return []
         Cons a rest -> (a:) <$> takeListT (n - 1) rest
 
--- Take at most `n` elements from the plan (blocks and returns all `n` at once)
+-- Take at most `n` elements from the Plan execution (blocks and returns all `n` at once)
 takePlan :: MonadRunner b => Int -> Plan -> b [History]
 takePlan n = takeListT n . unfoldPlan
 
--- Runs a plan, discarding the result. May never return
+-- Executes a Plan, discarding the result. May never return.
 executePlan :: MonadRunner b => Plan -> b ()
 executePlan = runListT . unfoldPlan
