@@ -18,6 +18,7 @@ module Pipelines
   , Plan(..)
   , unfoldPlan
   , takePlan
+  , takeAllPlan
   , executePlan
   ) where
 
@@ -97,7 +98,7 @@ initialPlanState = PlanState [] StartPos
 -- A real implementation might work in IO over the filesystem.
 -- An implementation for tests might work over State and yield fake history.
 class Monad b => MonadRunner b where
-  runner :: Name -> [History] -> Task -> b History
+  runner :: Plan -> [History] -> Task -> b History
 
 -- | A typeclass to wrangle our Plan operations
 type MonadPlan b m = (MonadRunner b, MonadBase b m,
@@ -175,9 +176,9 @@ currentTask = do
 -- | Runs the given Task and updates state
 runTask :: MonadPlan b m => Task -> m History
 runTask task = do
-  name <- asks _planName
+  plan <- ask
   recentHistory <- gets _planStateHistory
-  history <- liftBase $ runner name recentHistory task
+  history <- liftBase $ runner plan recentHistory task
   modify (\s -> s { _planStateHistory = history : (_planStateHistory s) })
   case _historyResult history of
     FailResult -> modify (\s -> s { _planStatePosition = FailPos })
@@ -229,11 +230,11 @@ listPlanT (ListT mStep) plan state = ListT $ do
              Nil -> Nil
              Cons a rest -> Cons a $ listPlanT rest plan state'
 
--- | Unfold a Plan into a sequence of Task-execution actions that yield History
+-- | Unfolds a Plan into a sequence of Task-execution actions that yield History
 unfoldPlan :: MonadRunner b => Plan -> ListT b History
 unfoldPlan plan = listPlanT walk plan initialPlanState
 
--- | Take at most `n` elements from the ListT (blocks and returns all `n` at once)
+-- | Takes at most `n` elements from the ListT (blocks and returns all `n` at once)
 takeListT :: Monad b => Int -> ListT b a -> b [a]
 takeListT n (ListT mStep) =
   if n <= 0
@@ -244,10 +245,22 @@ takeListT n (ListT mStep) =
         Nil -> return []
         Cons a rest -> (a:) <$> takeListT (n - 1) rest
 
--- Take at most `n` elements from the Plan execution (blocks and returns all `n` at once)
+-- | Takes at most `n` elements from the Plan execution (blocks and returns all `n` at once)
 takePlan :: MonadRunner b => Int -> Plan -> b [History]
 takePlan n = takeListT n . unfoldPlan
 
--- Executes a Plan, discarding the result. May never return.
+-- | Takes all elements from the ListT (blocks and returns all at once, if at all)
+takeAllListT :: Monad b => ListT b a -> b [a]
+takeAllListT (ListT mStep) = do
+  step <- mStep
+  case step of
+    Nil -> return []
+    Cons a rest -> (a:) <$> takeAllListT rest
+
+-- | Takes all elements from the Plan execution (blocks and returns all at once, if at all)
+takeAllPlan :: MonadRunner b => Plan -> b [History]
+takeAllPlan = takeAllListT . unfoldPlan
+
+-- | Executes a Plan, discarding the result. May never return.
 executePlan :: MonadRunner b => Plan -> b ()
 executePlan = runListT . unfoldPlan
