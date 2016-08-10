@@ -18,6 +18,7 @@ module Pipelines
   , Plan(..)
   , unfoldPlan
   , takePlan
+  , executePlan
   ) where
 
 -- import Control.Lens
@@ -121,7 +122,14 @@ advancePosition = do
       let next = nextTaskAfter n tasks
           pos = maybe EndPos (TaskPos . _taskName) next
       modify (\s -> s { _planStatePosition = pos })
-    EndPos -> return ()  -- TODO loop to start
+    EndPos ->
+      case loop of
+        StopLoop -> return ()
+        ContinueLoop -> do
+          empty <- isEmpty
+          if empty
+            then return ()
+            else modify (\s -> s { _planStatePosition = StartPos }) >> advancePosition
     FailPos -> return ()
 
 -- Advance StartPos to the next task
@@ -182,10 +190,7 @@ instance MonadTrans PlanT where
 instance Monad b => MonadBase b (PlanT b) where
   liftBase = lift
 
-type Evaluator b m = forall a. m a -> Plan -> PlanState -> b (a, PlanState)
-
--- runPlanT :: PlanT b a -> Plan -> PlanState -> b (a, PlanState)
-runPlanT :: Monad b => Evaluator b (PlanT b)
+runPlanT :: PlanT b a -> Plan -> PlanState -> b (a, PlanState)
 runPlanT (PlanT x) = runStateT . runReaderT x
 
 listPlanT :: Monad b => ListT (PlanT b) a -> Plan -> PlanState -> ListT b a
@@ -199,8 +204,19 @@ unfoldPlan :: MonadRunner b => Plan -> ListT b History
 unfoldPlan plan = listPlanT walk plan initialPlanState
 
 takeListT :: Monad b => Int -> ListT b a -> b [a]
-takeListT = undefined -- TODO
+takeListT n (ListT mStep) =
+  if n <= 0
+    then return []
+    else do
+      step <- mStep
+      case step of
+        Nil -> return []
+        Cons a rest -> (a:) <$> takeListT (n - 1) rest
 
 -- Take at most `n` elements from the plan (blocks and returns all `n` at once)
 takePlan :: MonadRunner b => Int -> Plan -> b [History]
-takePlan n plan = takeListT n $ unfoldPlan plan
+takePlan n = takeListT n . unfoldPlan
+
+-- Runs a plan, discarding the result. May never return
+executePlan :: MonadRunner b => Plan -> b ()
+executePlan = runListT . unfoldPlan
