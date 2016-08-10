@@ -21,3 +21,7 @@ localRunner = undefined
 
 instance MonadRunner LocalRunner where
   runner = localRunner
+
+-- TODO parse config and Plan
+runLocal :: IO ()
+runLocal = return ()

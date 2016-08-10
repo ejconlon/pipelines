@@ -1,6 +1,6 @@
 module Main where
 
-import Pipelines
+import Local
 
 main :: IO ()
-main = return ()
+main = runLocal
