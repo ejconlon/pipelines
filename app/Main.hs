@@ -1,6 +1,6 @@
 module Main where
 
-import Local
+import Pipelines.Local
 
 main :: IO ()
 main = runLocal

@@ -36,11 +36,11 @@ run web interface that can
 - show plan state
 - clone and restart archived plans
 -}
-module Local where
+module Pipelines.Local where
 
 import Control.Monad.IO.Class
 import Control.Monad.Reader
-import Pipelines
+import Pipelines.Core
 
 data LocalConfig = LocalConfig { }
 
