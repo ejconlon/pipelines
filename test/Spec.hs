@@ -1,17 +1,17 @@
-{-# LANGUAGE ConstraintKinds #-}
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE ConstraintKinds            #-}
+{-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings          #-}
 
-import Control.Monad.Except
-import Control.Monad.Reader
-import Control.Monad.State
-import Data.Functor.Identity
-import qualified Data.Map.Strict as M
-import Pipelines
-import Test.Tasty
-import Test.Tasty.HUnit
-import qualified Data.Text as T
+import           Control.Monad.Except
+import           Control.Monad.Reader
+import           Control.Monad.State
+import           Data.Functor.Identity
+import qualified Data.Map.Strict       as M
+import qualified Data.Text             as T
+import           Pipelines
+import           Test.Tasty
+import           Test.Tasty.HUnit
 
 -- Start out by defining our ExpectRunner Monad that implements MonadRunner:
 

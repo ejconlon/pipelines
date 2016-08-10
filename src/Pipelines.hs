@@ -1,10 +1,10 @@
-{-# LANGUAGE ConstraintKinds #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE ConstraintKinds            #-}
+{-# LANGUAGE FlexibleContexts           #-}
+{-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE Rank2Types #-}
+{-# LANGUAGE MultiParamTypeClasses      #-}
+{-# LANGUAGE OverloadedStrings          #-}
+{-# LANGUAGE Rank2Types                 #-}
 
 -- | Utilities to define and run pipelines of tasks.
 module Pipelines
@@ -23,16 +23,16 @@ module Pipelines
   , executePlan
   ) where
 
-import qualified Data.Aeson as A
-import qualified Data.Aeson.Types as A
-import Data.Aeson ((.:))
-import Control.Monad (forM_)
-import Control.Monad.Base
-import Control.Monad.IO.Class
-import Control.Monad.Reader
-import Control.Monad.State
-import qualified Data.Text as T
-import List.Transformer
+import           Control.Monad          (forM_)
+import           Control.Monad.Base
+import           Control.Monad.IO.Class
+import           Control.Monad.Reader
+import           Control.Monad.State
+import           Data.Aeson             ((.:))
+import qualified Data.Aeson             as A
+import qualified Data.Aeson.Types       as A
+import qualified Data.Text              as T
+import           List.Transformer
 
 -- | A stringy identifier for a Plan or a Task
 type Name = T.Text
