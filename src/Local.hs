@@ -2,6 +2,40 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
+{-
+Design:
+
+config:
+workdir
+plan json paths
+
+validation:
+workdir exists
+plan json paths exist and parse correctly
+
+preparation:
+create plan directories
+- create input subdir
+- create task subdir
+- create state subdir
+- create archive subdir
+
+execution:
+watch input dir
+invoke plans on new inputs
+update state dir with state changes
+if finished, move input to archive
+can cancel by moving input to archive manually
+
+remote access:
+run web interface that can
+- list running plans
+- list archived plans
+- create new inputs
+- stop running plans
+- show plan state
+- clone and restart archived plans
+-}
 module Local where
 
 import Control.Monad.IO.Class
