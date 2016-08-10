@@ -1,6 +1,7 @@
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 import Control.Monad.Except
 import Control.Monad.Reader
@@ -10,6 +11,7 @@ import qualified Data.Map.Strict as M
 import Pipelines
 import Test.Tasty
 import Test.Tasty.HUnit
+import qualified Data.Text as T
 
 -- Start out by defining our ExpectRunner Monad that implements MonadRunner:
 
@@ -46,7 +48,7 @@ expectHistory :: MonadExpect m => Name -> Result -> m History
 expectHistory name result = do
   curId <- gets _expectStateId
   modify (\s -> s { _expectStateId = _expectStateId s + 1 })
-  return $ History name (show curId) result
+  return $ History name (T.pack (show curId)) result
 
 expectRunner :: MonadExpect m => Plan -> [History] -> Task -> m History
 expectRunner _ _ task = do
