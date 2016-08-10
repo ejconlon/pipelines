@@ -1,6 +1,8 @@
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE TupleSections #-}
 
@@ -63,7 +65,11 @@ data PlanState = PlanState
 initialPlanState :: PlanState
 initialPlanState = PlanState [] StartPos
 
-type MonadPlan b m = (MonadBase b m, MonadReader Plan m, MonadState PlanState m)
+class Monad b => MonadRunner b where
+  runner :: Task -> b History
+
+type MonadPlan b m = (MonadRunner b, MonadBase b m,
+                      MonadReader Plan m, MonadState PlanState m)
 
 lookupTask :: Name -> [Task] -> Maybe Task
 lookupTask _ [] = Nothing
@@ -80,13 +86,13 @@ nextTaskAfter _ [_] = Nothing
 nextTaskAfter n (s:t:ss) | n == _taskName s = Just t
                          | otherwise = nextTaskAfter n (t:ss)
 
-isEmpty :: MonadPlan IO m => m Bool
+isEmpty :: MonadPlan b m => m Bool
 isEmpty = null <$> asks _planTasks
 
-isDone :: MonadPlan IO m => m Bool
+isDone :: MonadPlan b m => m Bool
 isDone = (\p -> p == EndPos || p == FailPos) <$> gets _planStatePosition
 
-advancePosition :: MonadPlan IO m => m ()
+advancePosition :: MonadPlan b m => m ()
 advancePosition = do
   tasks <- asks _planTasks
   loop <- asks _planLoop
@@ -104,14 +110,14 @@ advancePosition = do
     FailPos -> return ()
 
 -- Advance StartPos to the next task
-normalizePosition :: MonadPlan IO m => m ()
+normalizePosition :: MonadPlan b m => m ()
 normalizePosition = do
   position <- gets _planStatePosition
   case position of
     StartPos -> advancePosition
     _ -> return ()
 
-currentTask :: MonadPlan IO m => m (Maybe Task)
+currentTask :: MonadPlan b m => m (Maybe Task)
 currentTask = do
   tasks <- asks _planTasks
   position <- gets _planStatePosition
@@ -120,10 +126,10 @@ currentTask = do
              TaskPos n -> lookupTask n tasks
              EndPos -> Nothing
 
-type Runner n = Task -> n History
+type Runner b = Task -> b History
 
-runTask :: MonadPlan IO m => Runner IO -> Task -> m History
-runTask runner task = do
+runTask :: MonadPlan b m => Task -> m History
+runTask task = do
   history <- liftBase $ runner task
   let name = _taskName task
       result = _historyResult history
@@ -133,36 +139,48 @@ runTask runner task = do
     OkResult -> advancePosition
   return history
 
-step :: MonadPlan IO m => Runner IO -> m (Maybe History)
-step runner = do
+step :: MonadPlan b m => m (Maybe History)
+step = do
   normalizePosition
   task <- currentTask
-  forM task $ runTask runner
+  forM task runTask
 
-type Evaluator m n = forall a. m a -> Plan -> PlanState -> n (a, PlanState)
-
-subWalk :: MonadPlan IO m => Runner IO -> Evaluator m IO -> Plan -> PlanState -> IO (Step IO History)
-subWalk runner evaluator plan planState = do
-  (done, state') <- evaluator isDone plan planState
+walk :: MonadPlan b m => ListT m History
+walk = ListT $ do
+  done <- isDone
   if done
     then return Nil
     else do
-      (mh, state'') <- evaluator (step runner) plan state'
+      mh <- step
       case mh of
-        Just h -> return $ Cons h (walk runner evaluator plan state'')
+        Just h -> return $ Cons h walk
         Nothing -> return Nil
 
-walk :: MonadPlan IO m => Runner IO -> Evaluator m IO -> Plan -> PlanState -> ListT IO History
-walk runner evaluator plan planState = ListT $ subWalk runner evaluator plan planState
-
-newtype PlanT a = PlanT
-  { unPlanT :: ReaderT Plan (StateT PlanState IO) a }
+newtype PlanT b a = PlanT
+  { unPlanT :: ReaderT Plan (StateT PlanState b) a }
   deriving (Functor, Applicative, Monad, MonadReader Plan,
-            MonadState PlanState, MonadIO, MonadBase IO)
+            MonadState PlanState)
 
--- runPlanT :: PlanT a -> Plan -> PlanState -> IO (a, PlanState)
-runPlanT :: Evaluator PlanT IO
+instance MonadTrans PlanT where
+  lift = PlanT . lift . lift
+
+instance Monad b => MonadBase b (PlanT b) where
+  liftBase = lift
+
+type Evaluator b m = forall a. m a -> Plan -> PlanState -> b (a, PlanState)
+
+type PlanEvaluator b = Evaluator b (PlanT b)
+
+-- runPlanT :: PlanT b a -> Plan -> PlanState -> b (a, PlanState)
+runPlanT :: Monad b => PlanEvaluator b
 runPlanT (PlanT x) = runStateT . runReaderT x
 
-unfoldPlan :: Runner IO -> Plan -> ListT IO History
-unfoldPlan runner plan = walk runner runPlanT plan initialPlanState
+listPlanT :: Monad b => PlanEvaluator b -> Plan -> PlanState -> ListT (PlanT b) a -> ListT b a
+listPlanT evaluator plan state (ListT mStep) = ListT $ do
+  (step, state') <- runPlanT mStep plan state
+  return $ case step of
+             Nil -> Nil
+             Cons a rest -> Cons a $ listPlanT evaluator plan state' rest
+
+unfoldPlan :: MonadRunner b => PlanEvaluator b -> Plan -> ListT b History
+unfoldPlan evaluator plan = listPlanT evaluator plan initialPlanState walk
