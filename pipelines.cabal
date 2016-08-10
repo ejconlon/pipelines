@@ -28,7 +28,7 @@ library
                      , transformers
                      , transformers-base
                      --, turtle
-                     , uuid
+                     --, uuid
   default-language:    Haskell2010
 
 executable pipelines-exe
@@ -44,6 +44,8 @@ test-suite pipelines-test
   hs-source-dirs:      test
   main-is:             Spec.hs
   build-depends:       base
+                     , containers
+                     , mtl
                      , pipelines
                      , tasty
                      , tasty-hunit

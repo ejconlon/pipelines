@@ -8,7 +8,8 @@
 
 -- | Utilities to define and run pipelines of tasks.
 module Pipelines
-  ( Name
+  ( MonadRunner(..)
+  , Name
   , Action
   , Interval
   , Result(..)
@@ -28,13 +29,15 @@ import Control.Monad.Catch
 import Control.Monad.IO.Class
 import Control.Monad.Reader
 import Control.Monad.State
-import Data.UUID (UUID)
 import List.Transformer
 
 -- TODO(eric) better types for these:
 
 -- | A stringy identifier for a Plan or a Task
 type Name = String
+
+-- | A stringy identifer for a Task's execution in the world
+type Uid = String
 
 -- | A stringy identifier for a Task's action in the world
 type Action = String
@@ -49,7 +52,7 @@ data Result = OkResult | FailResult deriving (Show, Eq)
 -- | Relevant information about the completed execution of a Task
 data History = History
   { _historyName   :: Name
-  , _historyUuid   :: UUID
+  , _historyUid    :: Uid
   , _historyResult :: Result
   } deriving (Show, Eq)
 
@@ -83,7 +86,7 @@ data Position =
 
 -- | State relevant to the execution of a task
 data PlanState = PlanState
-  { _planStateHistory :: [History]  -- as a stack (most recent first)
+  { _planStateHistory  :: [History]  -- as a stack (most recent first)
   , _planStatePosition :: Position
   } deriving (Show, Eq)
 
