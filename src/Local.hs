@@ -1,5 +1,11 @@
+{-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+
 module Local where
 
+import Control.Monad.IO.Class
+import Control.Monad.Reader
 import Pipelines
 
 data LocalConfig = LocalConfig { }

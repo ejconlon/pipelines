@@ -14,7 +14,8 @@ cabal-version:       >=1.10
 
 library
   hs-source-dirs:      src
-  exposed-modules:     Pipelines
+  exposed-modules:     Local
+                     , Pipelines
   build-depends:       base >= 4.7 && < 5
                      , exceptions
                      --, filepath
