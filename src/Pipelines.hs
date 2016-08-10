@@ -6,7 +6,19 @@
 {-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE TupleSections #-}
 
-module Pipelines where
+module Pipelines
+  ( Name
+  , Timeout
+  , Action
+  , Interval
+  , Result(..)
+  , History(..)
+  , Task(..)
+  , Loop(..)
+  , Plan(..)
+  , unfoldPlan
+  , takePlan
+  ) where
 
 -- import Control.Lens
 import Control.Monad (forM_)
@@ -46,8 +58,9 @@ data Loop
   deriving (Show, Eq)
 
 data Plan = Plan
-  { _planTasks   :: [Task]
-  , _planLoop    :: Loop
+  { _planName  :: Name
+  , _planTasks :: [Task]
+  , _planLoop  :: Loop
   } deriving (Show, Eq)
 
 data Position =
@@ -66,7 +79,9 @@ initialPlanState :: PlanState
 initialPlanState = PlanState [] StartPos
 
 class Monad b => MonadRunner b where
-  runner :: Task -> b History
+  -- Given a plan name and a stack of task results,
+  -- runs a plan and returns a result in context
+  runner :: Name -> [History] -> Task -> b History
 
 type MonadPlan b m = (MonadRunner b, MonadBase b m,
                       MonadReader Plan m, MonadState PlanState m)
@@ -130,11 +145,11 @@ type Runner b = Task -> b History
 
 runTask :: MonadPlan b m => Task -> m History
 runTask task = do
-  history <- liftBase $ runner task
-  let name = _taskName task
-      result = _historyResult history
+  name <- asks _planName
+  recentHistory <- gets _planStateHistory
+  history <- liftBase $ runner name recentHistory task
   modify (\s -> s { _planStateHistory = history : (_planStateHistory s) })
-  case result of
+  case _historyResult history of
     FailResult -> modify (\s -> s { _planStatePosition = FailPos })
     OkResult -> advancePosition
   return history
@@ -169,18 +184,23 @@ instance Monad b => MonadBase b (PlanT b) where
 
 type Evaluator b m = forall a. m a -> Plan -> PlanState -> b (a, PlanState)
 
-type PlanEvaluator b = Evaluator b (PlanT b)
-
 -- runPlanT :: PlanT b a -> Plan -> PlanState -> b (a, PlanState)
-runPlanT :: Monad b => PlanEvaluator b
+runPlanT :: Monad b => Evaluator b (PlanT b)
 runPlanT (PlanT x) = runStateT . runReaderT x
 
-listPlanT :: Monad b => PlanEvaluator b -> Plan -> PlanState -> ListT (PlanT b) a -> ListT b a
-listPlanT evaluator plan state (ListT mStep) = ListT $ do
+listPlanT :: Monad b => ListT (PlanT b) a -> Plan -> PlanState -> ListT b a
+listPlanT (ListT mStep) plan state = ListT $ do
   (step, state') <- runPlanT mStep plan state
   return $ case step of
              Nil -> Nil
-             Cons a rest -> Cons a $ listPlanT evaluator plan state' rest
+             Cons a rest -> Cons a $ listPlanT rest plan state'
 
-unfoldPlan :: MonadRunner b => PlanEvaluator b -> Plan -> ListT b History
-unfoldPlan evaluator plan = listPlanT evaluator plan initialPlanState walk
+unfoldPlan :: MonadRunner b => Plan -> ListT b History
+unfoldPlan plan = listPlanT walk plan initialPlanState
+
+takeListT :: Monad b => Int -> ListT b a -> b [a]
+takeListT = undefined -- TODO
+
+-- Take at most `n` elements from the plan (blocks and returns all `n` at once)
+takePlan :: MonadRunner b => Int -> Plan -> b [History]
+takePlan n plan = takeListT n $ unfoldPlan plan
