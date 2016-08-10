@@ -75,7 +75,7 @@ simplePlan = Plan
 -- | Assert we can successfully run our 3 tasks
 testSimple :: TestTree
 testSimple = testCase "simple" $ do
-  let look = (\_ -> Just OkResult)
+  let look _ = Just OkResult
       config = ExpectConfig look
       expected = Right
         [ History "taskA" "0" OkResult

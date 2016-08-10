@@ -23,7 +23,7 @@ module Pipelines
   , executePlan
   ) where
 
-import           Control.Monad          (forM_)
+import           Control.Monad          (forM_, unless)
 import           Control.Monad.Base
 import           Control.Monad.IO.Class
 import           Control.Monad.Reader
@@ -72,7 +72,7 @@ instance A.FromJSON Loop where
     case t of
       "stop" -> return StopLoop
       "continue" -> return ContinueLoop
-      _ -> fail ("invalid Loop " ++ (T.unpack t))
+      _ -> fail ("invalid Loop " ++ T.unpack t)
   parseJSON invalid = A.typeMismatch "Loop" invalid
 
 -- | A sequence of tasks
@@ -178,9 +178,8 @@ advancePosition = do
         StopLoop -> return ()
         ContinueLoop -> do
           empty <- isEmpty
-          if empty
-            then return ()
-            else modify (\s -> s { _planStatePosition = StartPos }) >> advancePosition
+          unless empty $
+            modify (\s -> s { _planStatePosition = StartPos }) >> advancePosition
     FailPos -> return ()
 
 -- | Handles default state: advances StartPos to the next task
@@ -207,7 +206,7 @@ runTask task = do
   plan <- ask
   recentHistory <- gets _planStateHistory
   history <- liftBase $ runner plan recentHistory task
-  modify (\s -> s { _planStateHistory = history : (_planStateHistory s) })
+  modify (\s -> s { _planStateHistory = history : _planStateHistory s })
   case _historyResult history of
     FailResult -> modify (\s -> s { _planStatePosition = FailPos })
     OkResult -> advancePosition
