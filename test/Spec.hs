@@ -3,13 +3,15 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings          #-}
 
-import           Control.Monad.Except
+import           Control.Monad.Catch
+import           Control.Monad.Catch.Pure
 import           Control.Monad.Reader
 import           Control.Monad.State
 import           Data.Functor.Identity
 import qualified Data.Map.Strict       as M
 import qualified Data.Text             as T
-import           Pipelines
+import           Data.Typeable
+import           Pipelines.Core
 import           Test.Tasty
 import           Test.Tasty.HUnit
 
@@ -21,9 +23,8 @@ data ExpectConfig = ExpectConfig
 
 -- Errors in the test suite, NOT errors in the system under test.
 -- Task errors should be configured in ExpectConfig.
-data ExpectError =
-  NotFoundError Name
-  deriving (Show, Eq)
+data NotFoundException = NotFoundException Name deriving (Show, Eq, Typeable)
+instance Exception NotFoundException where
 
 data ExpectState = ExpectState
   { _expectStateId :: Int
@@ -33,16 +34,16 @@ initialExpectState :: ExpectState
 initialExpectState = ExpectState 0
 
 type MonadExpect m = (Monad m, MonadReader ExpectConfig m,
-                      MonadState ExpectState m, MonadError ExpectError m)
+                      MonadState ExpectState m, MonadThrow m)
 
 newtype ExpectRunner a = ExpectRunner
-  { unExpectRunner :: ReaderT ExpectConfig (ExceptT ExpectError (StateT ExpectState Identity)) a
+  { unExpectRunner :: ReaderT ExpectConfig (StateT ExpectState (CatchT Identity)) a
   } deriving (Functor, Applicative, Monad,
-              MonadReader ExpectConfig, MonadState ExpectState, MonadError ExpectError)
+              MonadReader ExpectConfig, MonadState ExpectState, MonadThrow)
 
-runExpect :: ExpectRunner a -> ExpectConfig -> Either ExpectError a
+runExpect :: ExpectRunner a -> ExpectConfig -> Either SomeException a
 runExpect (ExpectRunner r) c =
-  runIdentity (evalStateT (runExceptT (runReaderT r c)) initialExpectState)
+  runIdentity (runCatchT ((evalStateT (runReaderT r c)) initialExpectState))
 
 expectHistory :: MonadExpect m => Name -> Result -> m History
 expectHistory name result = do
@@ -50,12 +51,12 @@ expectHistory name result = do
   modify (\s -> s { _expectStateId = _expectStateId s + 1 })
   return $ History name (T.pack (show curId)) result
 
-expectRunner :: MonadExpect m => Plan -> [History] -> Task -> m History
+expectRunner :: MonadExpect m => Runner m
 expectRunner _ _ task = do
   let name = _taskName task
   look <- asks _expectConfigLookup
   case look name of
-    Nothing -> throwError $ NotFoundError name
+    Nothing -> throwM $ NotFoundException name
     Just result -> expectHistory name result
 
 instance MonadRunner ExpectRunner where
@@ -77,14 +78,16 @@ testSimple :: TestTree
 testSimple = testCase "simple" $ do
   let look _ = Just OkResult
       config = ExpectConfig look
-      expected = Right
+      expected =
         [ History "taskA" "0" OkResult
         , History "taskB" "1" OkResult
         , History "taskC" "2" OkResult
         ]
       taken = takeAllPlan simplePlan
       actual = runExpect taken config
-  actual @?= expected
+  case actual of
+    Left e -> fail $ "got exception " ++ show e
+    Right a -> a @?= expected
 
 tests :: TestTree
 tests = testGroup "tests"

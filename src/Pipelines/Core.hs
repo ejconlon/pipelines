@@ -9,6 +9,7 @@
 -- | Utilities to define and run pipelines of tasks.
 module Pipelines.Core
   ( MonadRunner(..)
+  , Runner
   , Name
   , Action
   , Interval
@@ -119,6 +120,9 @@ data PlanState = PlanState
 initialPlanState :: PlanState
 initialPlanState = PlanState [] StartPos
 
+-- | A function that runs a Task.  See `MonadRunner`
+type Runner b = Plan -> [History] -> Task -> b History
+
 -- | The thing that actually runs tasks.
 -- Given a plan name and a stack of task results,
 -- runs a plan and returns a result in context.
@@ -126,7 +130,7 @@ initialPlanState = PlanState [] StartPos
 -- A real implementation might work in IO over the filesystem.
 -- An implementation for tests might work over State and yield fake history.
 class Monad b => MonadRunner b where
-  runner :: Plan -> [History] -> Task -> b History
+  runner :: Runner b
 
 -- | A typeclass to wrangle our Plan operations
 type MonadPlan b m = (MonadRunner b, MonadBase b m,

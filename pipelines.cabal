@@ -49,6 +49,7 @@ test-suite pipelines-test
   main-is:             Spec.hs
   build-depends:       base
                      , containers
+                     , exceptions
                      , mtl
                      , pipelines
                      , tasty
