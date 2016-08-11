@@ -10,10 +10,24 @@ import           Control.Monad.Reader
 import           Data.Functor.Identity
 import qualified Data.Map.Strict          as M
 import qualified Data.Text                as T
+import           Data.Time.Clock
 import           Data.Typeable
 import           Pipelines
 import           Test.Tasty
 import           Test.Tasty.HUnit
+
+-- Utilities to work with exception equality:
+
+isOk :: (Eq a, Show a) => Either SomeException a -> a -> Assertion
+isOk (Left e) _ = fail $ "got fail " ++ show e
+isOk (Right x) a = x @?= a
+
+isFail :: (Show a, Exception e, Eq e) => Either SomeException a -> e -> Assertion
+isFail (Right x) _ = fail $ "got ok " ++ show x
+isFail (Left z) e =
+  case cast z of
+    Nothing -> fail $ "incompatible: " ++ show z
+    Just f -> f @?= e
 
 -- Start out by defining our ExpectRunner Monad that implements MonadRunner:
 
@@ -71,13 +85,27 @@ testSimple = testCase "simple" $ do
         ]
       taken = takeAllPlan simplePlan Unit
       actual = runExpect taken config
-  case actual of
-    Left e -> fail $ "got exception " ++ show e
-    Right a -> a @?= expected
+  actual `isOk` expected
+
+startTime :: UTCTime
+startTime = UTCTime (toEnum 1) (fromIntegral 2)
+
+runFS :: FakeFST (CatchT Identity) a -> FSDir -> Either SomeException (a, FSDir, [WatchEvent])
+runFS fst dir = runIdentity $ runCatchT $ runFakeFST fst startTime dir 
+
+testFSRootExists :: TestTree
+testFSRootExists = testCase "fs root exists" $ do
+  runFS (doesDirectoryExistFS "/") emptyFSDir `isOk` (True, emptyFSDir, [])
+
+testFS :: TestTree
+testFS = testGroup "fs"
+  [ testFSRootExists
+  ]
 
 tests :: TestTree
 tests = testGroup "tests"
   [ testSimple
+  , testFS  
   ]
 
 main :: IO ()

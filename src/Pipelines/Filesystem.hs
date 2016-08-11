@@ -2,15 +2,7 @@
 {-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE MultiParamTypeClasses      #-}
 
-module Pipelines.Filesystem
-  ( assertDirExists
-  , assertFileExists  
-  , MonadFS(..)
-  , MonadWatch(..)
-  , Watch(..)
-  , WatchEventType(..)
-  , WatchEvent(..)
-  ) where
+module Pipelines.Filesystem where
 
 import           Control.Concurrent.Chan
 import           Control.Monad            (unless)
