@@ -27,6 +27,9 @@ instance Exception NotAFile
 data NotADir = NotADir FilePath deriving (Show, Eq, Typeable)
 instance Exception NotADir
 
+data InvalidState = InvalidState String deriving (Show, Eq, Typeable)
+instance Exception InvalidState
+
 assertDirExists :: (MonadFS m, MonadThrow m) => FilePath -> m ()
 assertDirExists path = do
   exists <- doesDirectoryExistFS path
@@ -90,11 +93,26 @@ getEntityParts [] e = Just e
 getEntityParts (_:_) (Right _) = Nothing
 getEntityParts (p:ps) (Left (FSDir m)) = M.lookup p m >>= getEntityParts ps
 
+writeFileParts :: MonadThrow m => FilePath -> [String] -> BL.ByteString -> FSDir -> m FSDir
+writeFileParts orig [] _ _ = throwM $ NotAFile orig
+writeFileParts orig [p] contents (FSDir m) =
+  case M.lookup p m of
+    Just (Left (FSDir _)) -> throwM $ NotAFile orig
+    _ -> do
+      let child = FSFile contents
+      return $ FSDir $ M.insert p (Right child) m
+writeFileParts orig (p:ps) contents (FSDir m) =
+  case M.lookup p m of
+    Just (Left d@(FSDir n)) -> do
+      child <- writeFileParts orig ps contents d
+      return $ FSDir $ M.insert p (Left child) n
+    _ -> throwM $ NotAFile orig
+
 getEntity :: Monad b => FilePath -> FakeFST b (Maybe FSEntity)
 getEntity path = do
   root <- get
-  let parts = splitPath path
-  return $ getEntityParts (drop 1 parts) (Left root)
+  let parts = drop 1 $ splitPath path
+  return $ getEntityParts parts (Left root)
 
 readFileFST :: MonadThrow b => FilePath -> FakeFST b BL.ByteString
 readFileFST path = do
@@ -103,9 +121,13 @@ readFileFST path = do
     Just (Right (FSFile b)) -> return b
     _ -> throwM $ NotAFile path
 
-writeFileFST :: FilePath -> BL.ByteString -> FakeFST b ()
-writeFileFST = undefined
-
+writeFileFST :: MonadThrow b => FilePath -> BL.ByteString -> FakeFST b ()
+writeFileFST path contents = do
+  root <- get
+  let parts = drop 1 $ splitPath path
+  newRoot <- liftBase $ writeFileParts path parts contents root
+  put newRoot
+        
 doesFileExistFST :: Monad b => FilePath -> FakeFST b Bool
 doesFileExistFST path = do
   entity <- getEntity path
