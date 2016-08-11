@@ -20,7 +20,7 @@ import qualified Data.Set               as S
 import qualified Data.Text              as T
 import           List.Transformer
 import           Pipelines.Core
-import           System.Directory
+import           Pipelines.Filesystem
 import           System.FilePath
 
 -- | Relevant information about the completed execution of a Task
@@ -65,7 +65,7 @@ instance A.ToJSON ExecutionState where
     , "histories" .= histories
     ]
 
-type MonadExecution b m = (Monad b, MonadIO b, Monad m, MonadIO m, MonadBase b m,
+type MonadExecution b m = (Monad b, MonadFS b, Monad m, MonadBase b m,
                            MonadReader ExecutionEnv m)
 
 asksName :: MonadExecution b m => m Name
@@ -100,14 +100,14 @@ writeState :: MonadExecution b m => ExecutionState -> m ()
 writeState state = do
   stateFile <- askStateFile
   let encoded = A.encode state
-  liftIO $ BL.writeFile stateFile encoded
+  liftBase $ writeFileFS stateFile encoded
 
 readState :: MonadExecution b m => m (Maybe ExecutionState)
 readState = do
   stateFile <- askStateFile
-  exists <- liftIO $ doesFileExist stateFile
+  exists <- liftBase $ doesFileExistFS stateFile
   if exists
-    then A.decode <$> liftIO (BL.readFile stateFile)
+    then A.decode <$> liftBase (readFileFS stateFile)
     else return Nothing
 
 newtype ExecutionT b a = ExecutionT

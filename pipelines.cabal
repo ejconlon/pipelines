@@ -18,6 +18,7 @@ library
                      , Pipelines.Coordination
                      , Pipelines.Core
                      , Pipelines.Execution
+                     , Pipelines.Filesystem
                      , Pipelines.Local
   build-depends:       base >= 4.7 && < 5
                      , aeson
