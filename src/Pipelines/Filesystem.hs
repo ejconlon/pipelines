@@ -1,29 +1,52 @@
 module Pipelines.Filesystem
-  ( MonadFS(..)
+  ( assertDirExists
+  , assertFileExists  
+  , MonadFS(..)
   , MonadWatch(..)
+  , PathDoesNotExist(..)  
   , Watch(..)
   , WatchEventType(..)
   , WatchEvent(..)
   ) where
 
 import           Control.Concurrent.Chan
+import           Control.Monad           (unless)
+import           Control.Monad.Catch
 import qualified Data.ByteString.Lazy    as BL
 import           Data.Time.Clock
+import           Data.Typeable
 import           List.Transformer
 import           System.Directory
 import qualified System.FSNotify         as N
+
+data PathDoesNotExist = PathDoesNotExist FilePath deriving (Show, Eq, Typeable)
+instance Exception PathDoesNotExist
+
+assertDirExists :: (MonadFS m, MonadThrow m) => FilePath -> m ()
+assertDirExists path = do
+  exists <- doesDirectoryExistFS path
+  unless exists $ throwM $ PathDoesNotExist path
+
+assertFileExists :: (MonadFS m, MonadThrow m) => FilePath -> m ()
+assertFileExists path = do
+  exists <- doesFileExistFS path
+  unless exists $ throwM $ PathDoesNotExist path
 
 class MonadFS b where
   readFileFS :: FilePath -> b BL.ByteString
   writeFileFS :: FilePath -> BL.ByteString -> b ()
   doesFileExistFS :: FilePath -> b Bool
   doesDirectoryExistFS :: FilePath -> b Bool
+  createDirectoryIfMissingFS :: Bool -> FilePath -> b ()
+  renameFileFS :: FilePath -> FilePath -> b ()
 
 instance MonadFS IO where
   readFileFS = BL.readFile
   writeFileFS = BL.writeFile
   doesFileExistFS = doesFileExist
   doesDirectoryExistFS = doesDirectoryExist
+  createDirectoryIfMissingFS = createDirectoryIfMissing
+  renameFileFS = renameFile
 
 data WatchEventType = AddedWatchEvent | ModifiedWatchEvent | RemovedWatchEvent deriving (Show, Eq)
 

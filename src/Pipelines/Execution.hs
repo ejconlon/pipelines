@@ -66,7 +66,7 @@ instance A.ToJSON ExecutionState where
     ]
 
 type MonadExecution b m = (Monad b, MonadFS b, Monad m, MonadBase b m,
-                           MonadReader ExecutionEnv m)
+                           MonadReader ExecutionEnv m, MonadThrow m)
 
 initializeSubdirs :: MonadExecution b m => m ()
 initializeSubdirs = undefined
