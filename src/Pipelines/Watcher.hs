@@ -83,5 +83,5 @@ readState = do
   stateFile <- askStateFile
   exists <- liftIO $ doesFileExist stateFile
   if exists
-    then A.decode <$> (liftIO (BL.readFile stateFile))
+    then A.decode <$> liftIO (BL.readFile stateFile)
     else return Nothing

@@ -8,8 +8,8 @@ import           Control.Monad.Catch.Pure
 import           Control.Monad.Reader
 import           Control.Monad.State
 import           Data.Functor.Identity
-import qualified Data.Map.Strict       as M
-import qualified Data.Text             as T
+import qualified Data.Map.Strict          as M
+import qualified Data.Text                as T
 import           Data.Typeable
 import           Pipelines
 import           Test.Tasty
@@ -43,7 +43,7 @@ newtype ExpectRunner a = ExpectRunner
 
 runExpect :: ExpectRunner a -> ExpectConfig -> Either SomeException a
 runExpect (ExpectRunner r) c =
-  runIdentity (runCatchT ((evalStateT (runReaderT r c)) initialExpectState))
+  runIdentity (runCatchT (evalStateT (runReaderT r c) initialExpectState))
 
 expectHistory :: MonadExpect m => Name -> Result -> m History
 expectHistory name result = do
