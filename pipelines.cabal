@@ -17,10 +17,14 @@ library
   exposed-modules:     Pipelines
                      , Pipelines.Core
                      , Pipelines.Local
+                     , Pipelines.Watcher
   build-depends:       base >= 4.7 && < 5
                      , aeson
-                     --, exceptions
-                     --, filepath
+                     , bytestring
+                     , containers
+                     , directory
+                     , exceptions
+                     , filepath
                      --, fsnotify
                      --, lens
                      , list-transformer

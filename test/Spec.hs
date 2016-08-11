@@ -11,7 +11,7 @@ import           Data.Functor.Identity
 import qualified Data.Map.Strict       as M
 import qualified Data.Text             as T
 import           Data.Typeable
-import           Pipelines.Core
+import           Pipelines
 import           Test.Tasty
 import           Test.Tasty.HUnit
 

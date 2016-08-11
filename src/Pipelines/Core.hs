@@ -29,7 +29,7 @@ import           Control.Monad.Base
 import           Control.Monad.IO.Class
 import           Control.Monad.Reader
 import           Control.Monad.State
-import           Data.Aeson             ((.:))
+import           Data.Aeson             ((.:), (.=))
 import qualified Data.Aeson             as A
 import qualified Data.Aeson.Types       as A
 import qualified Data.Text              as T
@@ -62,6 +62,13 @@ instance A.FromJSON Task where
       m .: "timeout"
   parseJSON invalid = A.typeMismatch "Task" invalid
 
+instance A.ToJSON Task where
+  toJSON (Task name action timeout) = A.object
+    [ "name" .= name
+    , "action" .= action
+    , "timeout" .= timeout
+    ]
+
 -- | Indicates whether a Plan should loop forever or stop
 data Loop
   = StopLoop
@@ -75,6 +82,10 @@ instance A.FromJSON Loop where
       "continue" -> return ContinueLoop
       _ -> fail ("invalid Loop " ++ T.unpack t)
   parseJSON invalid = A.typeMismatch "Loop" invalid
+
+instance A.ToJSON Loop where
+  toJSON StopLoop = A.String "stop"
+  toJSON ContinueLoop = A.String "continue"
 
 -- | A sequence of tasks
 data Plan = Plan
@@ -91,16 +102,52 @@ instance A.FromJSON Plan where
       m .: "loop"
   parseJSON invalid = A.typeMismatch "Plan" invalid
 
+instance A.ToJSON Plan where
+  toJSON (Plan name tasks loop) = A.object
+    [ "name" .= name
+    , "tasks" .= tasks
+    , "loop" .= loop
+    ]
+
 -- | The Result of running a Task
 -- TODO(eric) more info (esp on failure) and possibly a retry state
 data Result = OkResult | FailResult deriving (Show, Eq)
 
+instance A.FromJSON Result where
+  parseJSON (A.String t) =
+    case t of
+      "ok" -> return OkResult
+      "fail" -> return FailResult
+      _ -> fail ("invalid Result " ++ T.unpack t)
+  parseJSON invalid = A.typeMismatch "Result" invalid
+
+instance A.ToJSON Result where
+  toJSON OkResult = A.String "ok"
+  toJSON FailResult = A.String "fail"
+
 -- | Relevant information about the completed execution of a Task
 data History = History
-  { _historyName   :: Name
-  , _historyUid    :: Uid
-  , _historyResult :: Result
+  { _historyName      :: Name
+  , _historyUid       :: Uid
+  --, _historyStarted   :: Timestamp
+  --, _historyEnded     :: Timestamp
+  , _historyResult    :: Result
   } deriving (Show, Eq)
+
+instance A.FromJSON History where
+  parseJSON (A.Object m) =
+    History <$>
+      m .: "name"   <*>
+      m .: "uid"    <*>
+      m .: "result"
+  parseJSON invalid = A.typeMismatch "History" invalid
+
+instance A.ToJSON History where
+  toJSON (History name uid result) = A.object
+    [ "name" .= name
+    , "uid" .= uid
+    , "result" .= result
+    ]
 
 -- | Our position in a Plan's list of Tasks
 data Position =
