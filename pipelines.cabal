@@ -55,6 +55,7 @@ test-suite pipelines-test
   hs-source-dirs:      test
   main-is:             Spec.hs
   build-depends:       base
+                     , bytestring
                      , containers
                      , exceptions
                      , mtl

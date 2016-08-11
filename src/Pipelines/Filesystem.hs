@@ -45,6 +45,9 @@ class MonadFS b where
   createDirectoryIfMissingFS :: Bool -> FilePath -> b ()
   renameFileFS :: FilePath -> FilePath -> b ()
 
+touchFS :: MonadFS b => FilePath -> b ()
+touchFS path = writeFileFS path BL.empty
+
 instance MonadFS IO where
   readFileFS = BL.readFile
   writeFileFS = BL.writeFile

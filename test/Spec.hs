@@ -4,12 +4,13 @@
 {-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE TypeFamilies               #-}
 
+import qualified Data.ByteString.Lazy.Char8 as BLC
 import           Control.Monad.Catch
 import           Control.Monad.Catch.Pure
 import           Control.Monad.Reader
 import           Data.Functor.Identity
-import qualified Data.Map.Strict          as M
-import qualified Data.Text                as T
+import qualified Data.Map.Strict            as M
+import qualified Data.Text                  as T
 import           Data.Time.Clock
 import           Data.Typeable
 import           Pipelines
@@ -97,16 +98,40 @@ startTime :: UTCTime
 startTime = UTCTime (toEnum 1) (fromIntegral 2)
 
 runFS :: FakeFST (CatchT Identity) a -> FSDir -> Either SomeException (a, FSDir, [WatchEvent])
-runFS fst dir = runIdentity $ runCatchT $ runFakeFST fst startTime dir 
+runFS fst dir = runIdentity $ runCatchT $ runFakeFST fst startTime dir
+
+doFS :: FakeFST (CatchT Identity) a -> FSDir -> Either SomeException a
+doFS fst dir = (\(x, _, _) -> x) <$> runFS fst dir
 
 testFSRootExists :: TestTree
 testFSRootExists = testCase "fs root exists" $ do
-  runFS (doesDirectoryExistFS "/") emptyFSDir `isOk` (True, emptyFSDir, [])
-  runFS (doesFileExistFS "/") emptyFSDir `isOk` (False, emptyFSDir, [])
+  let root = emptyFSDir
+  doFS (doesDirectoryExistFS "/") root `isOk` True
+  doFS (doesFileExistFS "/") root `isOk` False
+
+testFSRead0 :: TestTree
+testFSRead0 = testCase "fs read 0" $ do
+  let fn = "/baz.txt"
+      c = BLC.pack "hello"
+      root = FSDir (M.singleton "baz.txt" (Right (FSFile c)))
+  doFS (doesDirectoryExistFS fn) root `isOk` False
+  doFS (doesFileExistFS fn) root `isOk` True
+  doFS (readFileFS fn) root `isOk` c
+
+testFSWrite0 :: TestTree
+testFSWrite0 = testCase "fs write 0" $ do
+  let fn = "/baz.txt"
+      c = BLC.pack "hello"
+      root = emptyFSDir
+  doFS (doesFileExistFS fn) root `isOk` False
+  doFS (writeFileFS fn c >> doesFileExistFS fn) root `isOk` True
+  doFS (writeFileFS fn c >> readFileFS fn) root `isOk` c
 
 testFS :: TestTree
 testFS = testGroup "fs"
   [ testFSRootExists
+  , testFSRead0
+  --, testFSWrite0  
   ]
 
 tests :: TestTree
