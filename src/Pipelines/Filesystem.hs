@@ -32,6 +32,10 @@ data Watch b c = Watch
   , _watchStop    :: b ()
   }
 
+instance Monad b => Monoid (Watch b c) where
+  mempty = Watch (ListT (return Nil)) (return ())
+  mappend (Watch e1 s1) (Watch e2 s2) = Watch (e1 <|> e2) (s1 >> s2)
+
 eventToWatchEvent :: N.Event -> WatchEvent
 eventToWatchEvent (N.Added p t) = WatchEvent AddedWatchEvent p t
 eventToWatchEvent (N.Modified p t) = WatchEvent ModifiedWatchEvent p t
