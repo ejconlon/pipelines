@@ -18,16 +18,22 @@ import           Test.Tasty.HUnit
 
 -- Utilities to work with exception equality:
 
-isOk :: (Eq a, Show a) => Either SomeException a -> a -> Assertion
-isOk (Left e) _ = fail $ "got fail " ++ show e
-isOk (Right x) a = x @?= a
+isOkLike :: (Eq a, Show a) => Either SomeException a -> (a -> Assertion) -> Assertion
+isOkLike (Left e) _ = fail $ "got fail " ++ show e
+isOkLike (Right x) f = f x
 
-isFail :: (Show a, Exception e, Eq e) => Either SomeException a -> e -> Assertion
-isFail (Right x) _ = fail $ "got ok " ++ show x
-isFail (Left z) e =
+isOk :: (Eq a, Show a) => Either SomeException a -> a -> Assertion
+isOk v a = isOkLike v $ \x -> x @?= a
+
+isFailLike :: (Show a, Exception e, Eq e) => Either SomeException a -> (e -> Assertion) -> Assertion
+isFailLike (Right x) _ = fail $ "got ok " ++ show x
+isFailLike (Left z) f =
   case cast z of
     Nothing -> fail $ "incompatible: " ++ show z
-    Just f -> f @?= e
+    Just x -> f x
+
+isFail :: (Show a, Exception e, Eq e) => Either SomeException a -> e -> Assertion
+isFail v e = isFailLike v $ \x -> x @?= e
 
 -- Start out by defining our ExpectRunner Monad that implements MonadRunner:
 
@@ -96,6 +102,7 @@ runFS fst dir = runIdentity $ runCatchT $ runFakeFST fst startTime dir
 testFSRootExists :: TestTree
 testFSRootExists = testCase "fs root exists" $ do
   runFS (doesDirectoryExistFS "/") emptyFSDir `isOk` (True, emptyFSDir, [])
+  runFS (doesFileExistFS "/") emptyFSDir `isOk` (False, emptyFSDir, [])
 
 testFS :: TestTree
 testFS = testGroup "fs"

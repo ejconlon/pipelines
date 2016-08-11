@@ -90,7 +90,8 @@ getEntityParts (p:ps) (Left (FSDir m)) = M.lookup p m >>= getEntityParts ps
 getEntity :: Monad b => FilePath -> FakeFST b (Maybe FSEntity)
 getEntity path = do
   root <- get
-  return $ getEntityParts (splitPath path) (Left root)
+  let parts = splitPath path
+  return $ getEntityParts (drop 1 parts) (Left root)
 
 readFileFST :: MonadThrow b => FilePath -> FakeFST b BL.ByteString
 readFileFST path = do
@@ -106,15 +107,15 @@ doesFileExistFST :: Monad b => FilePath -> FakeFST b Bool
 doesFileExistFST path = do
   entity <- getEntity path
   return $ case entity of
-             Just (Right (FSFile _)) -> False
-             _ -> True
+             Just (Right (FSFile _)) -> True
+             _ -> False
 
 doesDirectoryExistFST :: Monad b => FilePath -> FakeFST b Bool
 doesDirectoryExistFST path = do
   entity <- getEntity path
   return $ case entity of
-             Just (Left (FSDir _)) -> False
-             _ -> True
+             Just (Left (FSDir _)) -> True
+             _ -> False
 
 createDirectoryIfMissingFST :: Bool -> FilePath -> FakeFST b ()
 createDirectoryIfMissingFST = undefined
