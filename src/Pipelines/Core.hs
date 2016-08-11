@@ -5,16 +5,17 @@
 {-# LANGUAGE MultiParamTypeClasses      #-}
 {-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE Rank2Types                 #-}
+{-# LANGUAGE StandaloneDeriving         #-}
+{-# LANGUAGE TypeFamilies               #-}
+{-# LANGUAGE UndecidableInstances       #-}
 
 -- | Utilities to define and run pipelines of tasks.
 module Pipelines.Core
   ( MonadRunner(..)
-  , Runner
   , Name
   , Action
   , Interval
   , Result(..)
-  , History(..)
   , Task(..)
   , Loop(..)
   , Plan(..)
@@ -24,6 +25,7 @@ module Pipelines.Core
   , executePlan
   ) where
 
+import           Control.Exception
 import           Control.Monad          (forM_, unless)
 import           Control.Monad.Base
 import           Control.Monad.IO.Class
@@ -37,9 +39,6 @@ import           List.Transformer
 
 -- | A stringy identifier for a Plan or a Task
 type Name = T.Text
-
--- | A stringy identifer for a Task's execution in the world
-type Uid = T.Text
 
 -- | A stringy identifier for a Task's action in the world
 type Action = T.Text
@@ -110,7 +109,7 @@ instance A.ToJSON Plan where
     ]
 
 -- | The Result of running a Task
--- TODO(eric) more info (esp on failure) and possibly a retry state
+-- TODO(eric) possibly a retry state
 data Result = OkResult | FailResult deriving (Show, Eq)
 
 instance A.FromJSON Result where
@@ -125,29 +124,6 @@ instance A.ToJSON Result where
   toJSON OkResult = A.String "ok"
   toJSON FailResult = A.String "fail"
 
--- | Relevant information about the completed execution of a Task
-data History = History
-  { _historyName      :: Name
-  , _historyUid       :: Uid
-  --, _historyStarted   :: Timestamp
-  --, _historyEnded     :: Timestamp
-  , _historyResult    :: Result
-  } deriving (Show, Eq)
-
-instance A.FromJSON History where
-  parseJSON (A.Object m) =
-    History <$>
-      m .: "name"   <*>
-      m .: "uid"    <*>
-      m .: "result"
-  parseJSON invalid = A.typeMismatch "History" invalid
-
-instance A.ToJSON History where
-  toJSON (History name uid result) = A.object
-    [ "name" .= name
-    , "uid" .= uid
-    , "result" .= result
-    ]
 
 -- | Our position in a Plan's list of Tasks
 data Position =
@@ -157,18 +133,22 @@ data Position =
   | FailPos
   deriving (Show, Eq)
 
+data PlanEnv b = PlanEnv
+  { _planEnvPlan :: Plan
+  , _planEnvUid  :: Uid b
+  }
+
+deriving instance Show (Uid b) => Show (PlanEnv b)
+deriving instance Eq (Uid b) => Eq (PlanEnv b)
+
 -- | State relevant to the execution of a task
 data PlanState = PlanState
-  { _planStateHistory  :: [History]  -- as a stack (most recent first)
-  , _planStatePosition :: Position
+  { _planStatePosition :: Position
   } deriving (Show, Eq)
 
 -- | The default plan state: no history and at starting position
 initialPlanState :: PlanState
-initialPlanState = PlanState [] StartPos
-
--- | A function that runs a Task.  See `MonadRunner`
-type Runner b = Plan -> [History] -> Task -> b History
+initialPlanState = PlanState StartPos
 
 -- | The thing that actually runs tasks.
 -- Given a plan name and a stack of task results,
@@ -177,11 +157,12 @@ type Runner b = Plan -> [History] -> Task -> b History
 -- A real implementation might work in IO over the filesystem.
 -- An implementation for tests might work over State and yield fake history.
 class Monad b => MonadRunner b where
-  runner :: Runner b
-
+  data Uid b :: *
+  runner :: Plan -> Task -> Uid b -> b Result
+  
 -- | A typeclass to wrangle our Plan operations
 type MonadPlan b m = (MonadRunner b, MonadBase b m,
-                      MonadReader Plan m, MonadState PlanState m)
+                      MonadReader (PlanEnv b) m, MonadState PlanState m)
 
 -- | Finds a Task by name
 lookupTask :: Name -> [Task] -> Maybe Task
@@ -203,7 +184,7 @@ nextTaskAfter n (s:t:ss) | n == _taskName s = Just t
 
 -- | Are there any tasks in this Plan?
 isEmpty :: MonadPlan b m => m Bool
-isEmpty = null <$> asks _planTasks
+isEmpty = null <$> asks (_planTasks . _planEnvPlan)
 
 -- | Is this Plan failed or finished?
 isDone :: MonadPlan b m => m Bool
@@ -212,8 +193,8 @@ isDone = (\p -> p == EndPos || p == FailPos) <$> gets _planStatePosition
 -- | Updates our state to point to the next Task to be run
 advancePosition :: MonadPlan b m => m ()
 advancePosition = do
-  tasks <- asks _planTasks
-  loop <- asks _planLoop
+  tasks <- asks $ _planTasks . _planEnvPlan
+  loop <- asks $ _planLoop . _planEnvPlan
   position <- gets _planStatePosition
   case position of
     StartPos -> do
@@ -244,7 +225,7 @@ normalizePosition = do
 -- | Finds the current task
 currentTask :: MonadPlan b m => m (Maybe Task)
 currentTask = do
-  tasks <- asks _planTasks
+  tasks <- asks $ _planTasks . _planEnvPlan
   position <- gets _planStatePosition
   return $ case position of
              StartPos -> Nothing
@@ -252,26 +233,25 @@ currentTask = do
              EndPos -> Nothing
 
 -- | Runs the given Task and updates state
-runTask :: MonadPlan b m => Task -> m History
+runTask :: MonadPlan b m => Task -> m Result
 runTask task = do
-  plan <- ask
-  recentHistory <- gets _planStateHistory
-  history <- liftBase $ runner plan recentHistory task
-  modify (\s -> s { _planStateHistory = history : _planStateHistory s })
-  case _historyResult history of
+  plan <- asks _planEnvPlan
+  uid <- asks _planEnvUid
+  result <- liftBase $ runner plan task uid
+  case result of
     FailResult -> modify (\s -> s { _planStatePosition = FailPos })
     OkResult -> advancePosition
-  return history
+  return result
 
 -- | Runs the next Task and updates state
-step :: MonadPlan b m => m (Maybe History)
+step :: MonadPlan b m => m (Maybe Result)
 step = do
   normalizePosition
   task <- currentTask
   forM task runTask
 
 -- | A list of Task-execution actions
-walk :: MonadPlan b m => ListT m History
+walk :: MonadPlan b m => ListT m Result
 walk = ListT $ do
   done <- isDone
   if done
@@ -284,8 +264,8 @@ walk = ListT $ do
 
 -- | A concrete interpretation of `MonadPlan`
 newtype PlanT b a = PlanT
-  { unPlanT :: ReaderT Plan (StateT PlanState b) a }
-  deriving (Functor, Applicative, Monad, MonadReader Plan,
+  { unPlanT :: ReaderT (PlanEnv b) (StateT PlanState b) a }
+  deriving (Functor, Applicative, Monad, MonadReader (PlanEnv b),
             MonadState PlanState)
 
 -- | Monad boilerplate
@@ -297,20 +277,20 @@ instance Monad b => MonadBase b (PlanT b) where
   liftBase = lift
 
 -- | Monad boilerplate
-runPlanT :: PlanT b a -> Plan -> PlanState -> b (a, PlanState)
+runPlanT :: PlanT b a -> PlanEnv b -> PlanState -> b (a, PlanState)
 runPlanT (PlanT x) = runStateT . runReaderT x
 
 -- | Projects `PlanT b` actions in the list transformer to the base monad
-listPlanT :: Monad b => ListT (PlanT b) a -> Plan -> PlanState -> ListT b a
-listPlanT (ListT mStep) plan state = ListT $ do
-  (step, state') <- runPlanT mStep plan state
+listPlanT :: Monad b => ListT (PlanT b) a -> PlanEnv b -> PlanState -> ListT b a
+listPlanT (ListT mStep) planEnv state = ListT $ do
+  (step, state') <- runPlanT mStep planEnv state
   return $ case step of
              Nil -> Nil
-             Cons a rest -> Cons a $ listPlanT rest plan state'
+             Cons a rest -> Cons a $ listPlanT rest planEnv state'
 
 -- | Unfolds a Plan into a sequence of Task-execution actions that yield History
-unfoldPlan :: MonadRunner b => Plan -> ListT b History
-unfoldPlan plan = listPlanT walk plan initialPlanState
+unfoldPlan :: MonadRunner b => Plan -> Uid b -> ListT b Result
+unfoldPlan plan uid = listPlanT walk (PlanEnv plan uid) initialPlanState
 
 -- | Takes at most `n` elements from the ListT (blocks and returns all `n` at once)
 takeListT :: Monad b => Int -> ListT b a -> b [a]
@@ -324,8 +304,8 @@ takeListT n (ListT mStep) =
         Cons a rest -> (a:) <$> takeListT (n - 1) rest
 
 -- | Takes at most `n` elements from the Plan execution (blocks and returns all `n` at once)
-takePlan :: MonadRunner b => Int -> Plan -> b [History]
-takePlan n = takeListT n . unfoldPlan
+takePlan :: MonadRunner b => Int -> Plan -> Uid b -> b [Result]
+takePlan n plan uid = takeListT n $ unfoldPlan plan uid
 
 -- | Takes all elements from the ListT (blocks and returns all at once, if at all)
 takeAllListT :: Monad b => ListT b a -> b [a]
@@ -336,9 +316,9 @@ takeAllListT (ListT mStep) = do
     Cons a rest -> (a:) <$> takeAllListT rest
 
 -- | Takes all elements from the Plan execution (blocks and returns all at once, if at all)
-takeAllPlan :: MonadRunner b => Plan -> b [History]
-takeAllPlan = takeAllListT . unfoldPlan
+takeAllPlan :: MonadRunner b => Plan -> Uid b -> b [Result]
+takeAllPlan plan uid = takeAllListT $ unfoldPlan plan uid
 
 -- | Executes a Plan, discarding the result. May never return.
-executePlan :: MonadRunner b => Plan -> b ()
-executePlan = runListT . unfoldPlan
+executePlan :: MonadRunner b => Plan -> Uid b -> b ()
+executePlan plan uid = runListT $ unfoldPlan plan uid

@@ -1,5 +1,6 @@
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Pipelines.Watcher where
@@ -17,6 +18,25 @@ import List.Transformer
 import Pipelines.Core
 import System.Directory
 import System.FilePath
+
+-- | Relevant information about the completed execution of a Task
+data History = History
+  { _historyTaskName  :: Name
+  , _historyResult    :: Result
+  } deriving (Show, Eq)
+
+instance A.FromJSON History where
+  parseJSON (A.Object m) =
+    History <$>
+      m .: "task_name"   <*>
+      m .: "result"
+  parseJSON invalid = A.typeMismatch "History" invalid
+
+instance A.ToJSON History where
+  toJSON (History taskName result) = A.object
+    [ "task_name" .= taskName
+    , "result" .= result
+    ]
 
 data ExecutionEnv = ExecutionEnv
   { _executionEnvPlan    :: Plan
@@ -42,7 +62,7 @@ instance A.ToJSON ExecutionState where
     , "histories" .= histories
     ]
 
-type MonadExecution m = (Monad m, MonadIO m, MonadReader ExecutionEnv m, MonadRunner m, MonadThrow m)
+type MonadExecution m = (Monad m, MonadIO m, MonadReader ExecutionEnv m, MonadRunner m, MonadThrow m, MonadCatch m)
 
 asksName :: MonadReader ExecutionEnv m => m Name
 asksName = do
@@ -85,3 +105,14 @@ readState = do
   if exists
     then A.decode <$> liftIO (BL.readFile stateFile)
     else return Nothing
+
+newtype ExecutionT a = ExecutionT
+  { unExecutionT :: ReaderT ExecutionEnv IO a
+  } deriving (Functor, Applicative, Monad, MonadReader ExecutionEnv, MonadThrow, MonadCatch, MonadIO)
+
+-- instance MonadRunner ExecutionT where
+--   data Uid ExecutionT = Name
+--   runner = undefined
+
+-- runExecutionT :: ExecutionT a -> ExecutionEnv -> IO a
+-- runExecutionT (ExecutionT e) = runReaderT e
