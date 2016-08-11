@@ -43,8 +43,7 @@ instance A.ToJSON History where
     ]
 
 data ExecutionEnv = ExecutionEnv
-  { _executionEnvPlan    :: Plan
-  , _executionEnvPlanDir :: FilePath
+  { _executionEnvPlanDir :: FilePath
   , _executionEnvInput   :: FilePath
   } deriving (Show, Eq)
 
