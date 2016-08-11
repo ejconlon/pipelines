@@ -9,7 +9,6 @@
 module Pipelines.Execution where
 
 import           Control.Monad.Base
-import           Control.Monad.Catch
 import           Control.Monad.IO.Class
 import           Control.Monad.Reader
 import           Data.Aeson             ((.:), (.=))
@@ -66,10 +65,7 @@ instance A.ToJSON ExecutionState where
     ]
 
 type MonadExecution b m = (Monad b, MonadFS b, Monad m, MonadBase b m,
-                           MonadReader ExecutionEnv m, MonadThrow m)
-
-initializeSubdirs :: MonadExecution b m => m ()
-initializeSubdirs = undefined
+                           MonadReader ExecutionEnv m)
 
 asksName :: MonadExecution b m => m Name
 asksName = do
@@ -115,7 +111,7 @@ readState = do
 
 newtype ExecutionT b a = ExecutionT
   { unExecutionT :: ReaderT ExecutionEnv b a
-  } deriving (Functor, Applicative, Monad, MonadReader ExecutionEnv, MonadThrow, MonadCatch)
+  } deriving (Functor, Applicative, Monad, MonadReader ExecutionEnv)
 
 -- | Monad boilerplate
 instance MonadTrans ExecutionT where
