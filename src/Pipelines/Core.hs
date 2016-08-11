@@ -158,7 +158,7 @@ initialPlanState = PlanState StartPos
 class Monad b => MonadRunner b where
   data Uid b :: *
   runner :: Plan -> Task -> Uid b -> b Result
-  
+
 -- | A typeclass to wrangle our Plan operations
 type MonadPlan b m = (MonadRunner b, MonadBase b m,
                       MonadReader (PlanEnv b) m, MonadState PlanState m)

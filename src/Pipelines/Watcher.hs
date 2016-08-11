@@ -1,6 +1,8 @@
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Pipelines.Watcher where
@@ -9,6 +11,7 @@ import Data.Aeson ((.:), (.=))
 import qualified Data.Aeson as A
 import qualified Data.Aeson.Types as A
 import qualified Data.ByteString.Lazy as BL
+import Control.Monad.Base
 import Control.Monad.Catch
 import Control.Monad.Reader
 import Control.Monad.IO.Class
@@ -62,43 +65,44 @@ instance A.ToJSON ExecutionState where
     , "histories" .= histories
     ]
 
-type MonadExecution m = (Monad m, MonadIO m, MonadReader ExecutionEnv m, MonadRunner m, MonadThrow m, MonadCatch m)
+type MonadExecution b m = (Monad b, MonadIO b, Monad m, MonadIO m, MonadBase b m,
+                           MonadReader ExecutionEnv m)
 
-asksName :: MonadReader ExecutionEnv m => m Name
+asksName :: MonadExecution b m => m Name
 asksName = do
   input <- asks _executionEnvInput
   return $ T.pack $ takeBaseName input
 
-askStateFile :: MonadReader ExecutionEnv m => m FilePath
+askStateFile :: MonadExecution b m => m FilePath
 askStateFile = do
   planDir <- asks _executionEnvPlanDir
   name <- asksName
   return $ planDir </> "state" </> T.unpack name </> ".json"
 
-askTaskBaseDir :: MonadReader ExecutionEnv m => m FilePath
+askTaskBaseDir :: MonadExecution b m => m FilePath
 askTaskBaseDir = do
   planDir <- asks _executionEnvPlanDir
   return $ planDir </> "tasks"
 
-askTaskDir :: MonadReader ExecutionEnv m => Task -> m FilePath
+askTaskDir :: MonadExecution b m => Task -> m FilePath
 askTaskDir task = do
   taskBase <- askTaskBaseDir
   name <- asksName
   return $ taskBase </> T.unpack name
 
-askArchiveFile :: MonadReader ExecutionEnv m => m FilePath
+askArchiveFile :: MonadExecution b m => m FilePath
 askArchiveFile = do
   planDir <- asks _executionEnvPlanDir
   input <- asks _executionEnvInput
   return $ replaceDirectory input $ planDir </> "archive"
 
-writeState :: MonadExecution m => ExecutionState -> m ()
+writeState :: MonadExecution b m => ExecutionState -> m ()
 writeState state = do
   stateFile <- askStateFile
   let encoded = A.encode state
   liftIO $ BL.writeFile stateFile encoded
 
-readState :: MonadExecution m => m (Maybe ExecutionState)
+readState :: MonadExecution b m => m (Maybe ExecutionState)
 readState = do
   stateFile <- askStateFile
   exists <- liftIO $ doesFileExist stateFile
@@ -106,13 +110,17 @@ readState = do
     then A.decode <$> liftIO (BL.readFile stateFile)
     else return Nothing
 
-newtype ExecutionT a = ExecutionT
-  { unExecutionT :: ReaderT ExecutionEnv IO a
-  } deriving (Functor, Applicative, Monad, MonadReader ExecutionEnv, MonadThrow, MonadCatch, MonadIO)
+newtype ExecutionT b a = ExecutionT
+  { unExecutionT :: ReaderT ExecutionEnv b a
+  } deriving (Functor, Applicative, Monad, MonadReader ExecutionEnv, MonadThrow, MonadCatch)
 
--- instance MonadRunner ExecutionT where
---   data Uid ExecutionT = Name
---   runner = undefined
+-- | Monad boilerplate
+instance MonadTrans ExecutionT where
+  lift = ExecutionT . lift
 
--- runExecutionT :: ExecutionT a -> ExecutionEnv -> IO a
--- runExecutionT (ExecutionT e) = runReaderT e
+-- | Monad boilerplate
+instance Monad b => MonadBase b (ExecutionT b) where
+  liftBase = lift
+
+runExecutionT :: ExecutionT b a -> ExecutionEnv -> b a
+runExecutionT (ExecutionT e) = runReaderT e
