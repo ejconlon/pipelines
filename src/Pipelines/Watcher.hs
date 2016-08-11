@@ -1,31 +1,31 @@
-{-# LANGUAGE ConstraintKinds #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE ConstraintKinds            #-}
+{-# LANGUAGE FlexibleContexts           #-}
+{-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE MultiParamTypeClasses      #-}
+{-# LANGUAGE OverloadedStrings          #-}
 
 module Pipelines.Watcher where
 
-import Data.Aeson ((.:), (.=))
-import qualified Data.Aeson as A
-import qualified Data.Aeson.Types as A
-import qualified Data.ByteString.Lazy as BL
-import Control.Monad.Base
-import Control.Monad.Catch
-import Control.Monad.Reader
-import Control.Monad.IO.Class
-import qualified Data.Set as S
-import qualified Data.Text as T
-import List.Transformer
-import Pipelines.Core
-import System.Directory
-import System.FilePath
+import           Control.Monad.Base
+import           Control.Monad.Catch
+import           Control.Monad.IO.Class
+import           Control.Monad.Reader
+import           Data.Aeson             ((.:), (.=))
+import qualified Data.Aeson             as A
+import qualified Data.Aeson.Types       as A
+import qualified Data.ByteString.Lazy   as BL
+import qualified Data.Set               as S
+import qualified Data.Text              as T
+import           List.Transformer
+import           Pipelines.Core
+import           System.Directory
+import           System.FilePath
 
 -- | Relevant information about the completed execution of a Task
 data History = History
-  { _historyTaskName  :: Name
-  , _historyResult    :: Result
+  { _historyTaskName :: Name
+  , _historyResult   :: Result
   } deriving (Show, Eq)
 
 instance A.FromJSON History where
