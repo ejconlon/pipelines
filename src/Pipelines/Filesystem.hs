@@ -1,4 +1,10 @@
-module Pipelines.Filesystem where
+module Pipelines.Filesystem
+  ( MonadFS(..)
+  , MonadWatch(..)  
+  , Watch(..)
+  , WatchEventType(..)
+  , WatchEvent(..)
+  ) where
 
 import Control.Concurrent.Chan
 import qualified Data.ByteString.Lazy as BL
