@@ -78,7 +78,7 @@ emptyFSDir = FSDir M.empty
 
 newtype FakeFST b a = FakeFST
   { unFakeFST :: RWST UTCTime [WatchEvent] FSDir b a
-  } deriving (Functor, Applicative, Monad, MonadReader UTCTime, MonadState FSDir, MonadThrow)
+  } deriving (Functor, Applicative, Monad, MonadReader UTCTime, MonadState FSDir, MonadWriter [WatchEvent], MonadThrow)
 
 -- | Monad boilerplate
 instance MonadTrans FakeFST where
@@ -124,9 +124,12 @@ readFileFST path = do
 writeFileFST :: MonadThrow b => FilePath -> BL.ByteString -> FakeFST b ()
 writeFileFST path contents = do
   root <- get
+  exists <- doesFileExistFST path
   let parts = drop 1 $ splitPath path
+  time <- ask
   newRoot <- liftBase $ writeFileParts path parts contents root
   put newRoot
+  tell [WatchEvent (if exists then ModifiedWatchEvent else AddedWatchEvent) path time]
         
 doesFileExistFST :: Monad b => FilePath -> FakeFST b Bool
 doesFileExistFST path = do

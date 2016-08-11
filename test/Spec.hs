@@ -124,7 +124,12 @@ testFSWrite0 = testCase "fs write 0" $ do
       c = BLC.pack "hello"
       root = emptyFSDir
   doFS (doesFileExistFS fn) root `isOk` False
-  runFS (writeFileFS fn c) root `isOkLike` \(_, fs, _) -> fs @?= FSDir (M.singleton "baz.txt" (Right (FSFile c)))
+  runFS (writeFileFS fn c) root `isOkLike` \(_, fs, ev) -> do
+    fs @?= FSDir (M.singleton "baz.txt" (Right (FSFile c)))
+    ev @?= [WatchEvent AddedWatchEvent fn startTime]
+  runFS (writeFileFS fn c >> writeFileFS fn c) root `isOkLike` \(_, fs, ev) -> do
+    fs @?= FSDir (M.singleton "baz.txt" (Right (FSFile c)))
+    ev @?= [WatchEvent AddedWatchEvent fn startTime, WatchEvent ModifiedWatchEvent fn startTime]
   doFS (writeFileFS fn c >> doesFileExistFS fn) root `isOk` True
   doFS (writeFileFS fn c >> readFileFS fn) root `isOk` c
 
