@@ -1,14 +1,13 @@
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 
-module Pipelines.Coordination
-  ( CoordinationEnv(..)
-  , MonadCoordination
-  , initializeDirs
-  , watch  
-  ) where
+module Pipelines.Coordination where
 
 import Control.Monad.Base
+import Control.Monad.Catch
 import Control.Monad.IO.Class
 import Control.Monad.Reader
 import qualified Data.Text as T
@@ -37,5 +36,34 @@ initializeDirs = do
     forM_ ["input", "state", "tasks", "archive"] $ \subName -> do
       liftBase $ createDirectoryIfMissingFS False $ planDir </> subName                                                  
 
-watch :: MonadCoordination b m => m (Watch b ExecutionEnv)
-watch = undefined
+watch :: MonadCoordination b m => m (Watch b (Plan, ExecutionEnv))
+watch = do
+  baseDir <- asks _coordinationEnvBaseDir
+  plans <- asks _coordinationEnvPlans
+  watches <- forM plans $ \plan -> do
+    let planName = _planName plan
+        planDir = baseDir </> T.unpack planName
+        planInputsDir = planDir </> "input"
+    liftBase $ watchDir planInputsDir (const True) (\e -> (plan, ExecutionEnv planDir (_watchEventPath e)))
+  return $ mconcat watches
+
+newtype CoordinationT b a = CoordinationT
+  { unCoordinationT :: ReaderT CoordinationEnv b a
+  } deriving (Functor, Applicative, Monad, MonadReader CoordinationEnv)
+
+-- | Monad boilerplate
+instance MonadTrans CoordinationT where
+  lift = CoordinationT . lift
+
+-- | Monad boilerplate
+instance Monad b => MonadBase b (CoordinationT b) where
+  liftBase = lift
+
+runCoordinationT :: Monad b => CoordinationT b a -> CoordinationEnv -> b a
+runCoordinationT (CoordinationT x) = runReaderT x
+
+coordinate :: (MonadFS b, MonadWatch b, MonadThrow b) => FilePath -> [Plan] -> b (Watch b (Plan, ExecutionEnv))
+coordinate path plans = do
+  let env = CoordinationEnv path plans
+      action = initializeDirs >> watch
+  runCoordinationT action env

@@ -121,9 +121,9 @@ instance MonadTrans ExecutionT where
 instance Monad b => MonadBase b (ExecutionT b) where
   liftBase = lift
 
-instance MonadRunner b => MonadRunner (ExecutionT b) where
-  data Uid (ExecutionT b) = Wrap (Uid b)
-  runner task (Wrap uid) = lift (runner task uid)
+-- instance MonadRunner b => MonadRunner (ExecutionT b) where
+--   data Uid (ExecutionT b) = Wrap (Uid b)
+--   runner task (Wrap uid) = lift (runner task uid)
 
 runExecutionT :: ExecutionT b a -> ExecutionEnv -> b a
 runExecutionT (ExecutionT e) = runReaderT e

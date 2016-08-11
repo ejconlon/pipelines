@@ -207,7 +207,7 @@ data WatchEvent = WatchEvent
   } deriving (Show, Eq)
 
 data Watch b c = Watch
-  { _watchEvents :: ListT b (WatchEvent, c)
+  { _watchEvents :: ListT b c
   , _watchStop   :: b ()
   }
 
@@ -233,11 +233,11 @@ readChanToList c = ListT $ do
   return $ Cons value $ readChanToList c
 
 class MonadWatch b where
-  watchDir :: FilePath -> (WatchEvent -> Bool) -> c -> b (Watch b c)
+  watchDir :: FilePath -> (WatchEvent -> Bool) -> (WatchEvent -> c) -> b (Watch b c)
 
 instance MonadWatch IO where
-  watchDir path pred ctx = N.withManager $ \manager -> do
+  watchDir path pred fn = N.withManager $ \manager -> do
     chan <- newChan
     stop <- N.watchDirChan manager path (pred . eventToWatchEvent) chan
-    let list = (\e -> (eventToWatchEvent e, ctx)) <$> readChanToList chan
+    let list = (\e -> fn (eventToWatchEvent e)) <$> readChanToList chan
     return $ Watch list stop
