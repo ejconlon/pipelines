@@ -29,7 +29,7 @@ isOk v a = isOkLike v $ \x -> x @?= a
 isFailLike :: (Show a, Exception e, Eq e) => Either SomeException a -> (e -> Assertion) -> Assertion
 isFailLike (Right x) _ = fail $ "got ok " ++ show x
 isFailLike (Left z) f =
-  case cast z of
+  case fromException z of
     Nothing -> fail $ "incompatible: " ++ show z
     Just x -> f x
 
@@ -141,20 +141,46 @@ testFSMkdir0 = testCase "fs mkdir 0" $ do
   doFS (doesFileExistFS fn) root `isOk` False
   runFS (createDirectoryIfMissingFS False fn) root `isOkLike` \(_, fs, ev) -> do
     fs @?= FSDir (M.singleton "boo" (Left (FSDir M.empty)))
-    ev @?= [WatchEvent AddedWatchEvent fn startTime]
+    ev @?= []  -- We emit watch events only for file modifications
   runFS (createDirectoryIfMissingFS True fn) root `isOkLike` \(_, fs, ev) -> do
     fs @?= FSDir (M.singleton "boo" (Left (FSDir M.empty)))
-    ev @?= [WatchEvent AddedWatchEvent fn startTime]
+    ev @?= []
   runFS (createDirectoryIfMissingFS False fn >> createDirectoryIfMissingFS False fn) root `isOkLike` \(_, fs, ev) -> do
     fs @?= FSDir (M.singleton "boo" (Left (FSDir M.empty)))
-    ev @?= [WatchEvent AddedWatchEvent fn startTime, WatchEvent ModifiedWatchEvent fn startTime]
+    ev @?= []
+  doFS (createDirectoryIfMissingFS False fn >> doesDirectoryExistFS fn) root `isOk` True
+  doFS (createDirectoryIfMissingFS True fn >> doesDirectoryExistFS fn) root `isOk` True
+
+testFSMkdirRec :: TestTree
+testFSMkdirRec = testCase "fs mkdir recursive" $ do
+  let fn = "/foo/bar/baz"
+      root = emptyFSDir
+  doFS (doesDirectoryExistFS fn) root `isOk` False
+  doFS (createDirectoryIfMissingFS True fn >> doesDirectoryExistFS fn) root `isOk` True
+  doFS (createDirectoryIfMissingFS False fn) root `isFail` MissingParent fn
+  doFS (createDirectoryIfMissingFS True fn >> doesDirectoryExistFS fn) root `isOk` True
+  runFS (createDirectoryIfMissingFS True fn) root `isOkLike` \(_, fs, _) -> do
+    let c = FSDir (M.singleton "baz" (Left (FSDir M.empty)))
+        b = FSDir (M.singleton "bar" (Left c))
+        a = FSDir (M.singleton "foo" (Left b))
+    fs @?= a
+
+testFSWriteRec :: TestTree
+testFSWriteRec = testCase "fs write recursive" $ do
+  let dir = "/foo/bar/baz"
+      fn = "/foo/bar/baz/quux.txt"
+      c = BLC.pack "hello"
+      root = emptyFSDir
+  doFS (createDirectoryIfMissingFS True dir >> writeFileFS fn c >> readFileFS fn) root `isOk` c
 
 testFS :: TestTree
 testFS = testGroup "fs"
   [ testFSRootExists
   , testFSRead0
   , testFSWrite0
-  , testFSMkdir0  
+  , testFSMkdir0
+  , testFSMkdirRec
+  , testFSWriteRec
   ]
 
 tests :: TestTree

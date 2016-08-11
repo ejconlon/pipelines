@@ -91,6 +91,14 @@ instance MonadTrans FakeFST where
 instance Monad b => MonadBase b (FakeFST b) where
   liftBase = lift
 
+strip :: String -> String
+strip [] = []
+strip ['/'] = []
+strip (c:cs) = c : strip cs
+
+stripSplitPath :: FilePath -> [String]
+stripSplitPath path = strip <$> (drop 1 (splitPath path))
+
 getEntityParts :: [String] -> FSEntity -> Maybe FSEntity
 getEntityParts [] e = Just e
 getEntityParts (_:_) (Right _) = Nothing
@@ -134,7 +142,7 @@ mkDirParts mkParents path (p:ps) (FSDir m) =
 getEntity :: Monad b => FilePath -> FakeFST b (Maybe FSEntity)
 getEntity path = do
   root <- get
-  let parts = drop 1 $ splitPath path
+  let parts = stripSplitPath path
   return $ getEntityParts parts (Left root)
 
 readFileFST :: MonadThrow b => FilePath -> FakeFST b BL.ByteString
@@ -148,7 +156,7 @@ writeFileFST :: MonadThrow b => FilePath -> BL.ByteString -> FakeFST b ()
 writeFileFST path contents = do
   root <- get
   exists <- doesFileExistFST path
-  let parts = drop 1 $ splitPath path
+  let parts = stripSplitPath path
   time <- ask
   newRoot <- liftBase $ writeFileParts path parts contents root
   put newRoot
@@ -172,11 +180,9 @@ createDirectoryIfMissingFST :: MonadThrow b => Bool -> FilePath -> FakeFST b ()
 createDirectoryIfMissingFST mkParents path = do
   root <- get
   exists <- doesDirectoryExistFST path
-  let parts = drop 1 $ splitPath path
-  time <- ask
+  let parts = stripSplitPath path
   newRoot <- liftBase $ mkDirParts mkParents path parts root
   put newRoot
-  tell [WatchEvent (if exists then ModifiedWatchEvent else AddedWatchEvent) path time]
 
 renameFileFST :: FilePath -> FilePath -> FakeFST b ()
 renameFileFST = undefined
