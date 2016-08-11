@@ -27,6 +27,9 @@ instance Exception NotAFile
 data NotADir = NotADir FilePath deriving (Show, Eq, Typeable)
 instance Exception NotADir
 
+data MissingParent = MissingParent FilePath deriving (Show, Eq, Typeable)
+instance Exception MissingParent
+
 data InvalidState = InvalidState String deriving (Show, Eq, Typeable)
 instance Exception InvalidState
 
@@ -106,7 +109,27 @@ writeFileParts orig (p:ps) contents (FSDir m) =
     Just (Left d@(FSDir n)) -> do
       child <- writeFileParts orig ps contents d
       return $ FSDir $ M.insert p (Left child) n
-    _ -> throwM $ NotAFile orig
+    _ -> throwM $ MissingParent orig
+
+mkDirParts :: MonadThrow m => Bool -> FilePath -> [String] -> FSDir -> m FSDir
+mkDirParts _ _ [] dir = return dir
+mkDirParts mkParents path [p] d@(FSDir m) =
+  case M.lookup p m of
+    Just (Right (FSFile _)) -> throwM $ NotADir path
+    Just (Left (FSDir _)) -> return d
+    Nothing -> return $ FSDir $ M.insert p (Left emptyFSDir) m
+mkDirParts mkParents path (p:ps) (FSDir m) =
+  case M.lookup p m of
+    Just (Right (FSFile _)) -> throwM $ NotADir path
+    Just (Left e@(FSDir _)) -> do
+      child <- mkDirParts mkParents path ps e
+      return $ FSDir $ M.insert p (Left child) m
+    Nothing ->
+      if mkParents
+        then do
+          child <- mkDirParts mkParents path ps emptyFSDir
+          return $ FSDir $ M.insert p (Left child) m
+        else throwM $ MissingParent path  
 
 getEntity :: Monad b => FilePath -> FakeFST b (Maybe FSEntity)
 getEntity path = do
@@ -145,8 +168,15 @@ doesDirectoryExistFST path = do
              Just (Left (FSDir _)) -> True
              _ -> False
 
-createDirectoryIfMissingFST :: Bool -> FilePath -> FakeFST b ()
-createDirectoryIfMissingFST = undefined
+createDirectoryIfMissingFST :: MonadThrow b => Bool -> FilePath -> FakeFST b ()
+createDirectoryIfMissingFST mkParents path = do
+  root <- get
+  exists <- doesDirectoryExistFST path
+  let parts = drop 1 $ splitPath path
+  time <- ask
+  newRoot <- liftBase $ mkDirParts mkParents path parts root
+  put newRoot
+  tell [WatchEvent (if exists then ModifiedWatchEvent else AddedWatchEvent) path time]
 
 renameFileFST :: FilePath -> FilePath -> FakeFST b ()
 renameFileFST = undefined

@@ -133,11 +133,28 @@ testFSWrite0 = testCase "fs write 0" $ do
   doFS (writeFileFS fn c >> doesFileExistFS fn) root `isOk` True
   doFS (writeFileFS fn c >> readFileFS fn) root `isOk` c
 
+testFSMkdir0 :: TestTree
+testFSMkdir0 = testCase "fs mkdir 0" $ do
+  let fn = "/boo"
+      root = emptyFSDir
+  doFS (doesDirectoryExistFS fn) root `isOk` False
+  doFS (doesFileExistFS fn) root `isOk` False
+  runFS (createDirectoryIfMissingFS False fn) root `isOkLike` \(_, fs, ev) -> do
+    fs @?= FSDir (M.singleton "boo" (Left (FSDir M.empty)))
+    ev @?= [WatchEvent AddedWatchEvent fn startTime]
+  runFS (createDirectoryIfMissingFS True fn) root `isOkLike` \(_, fs, ev) -> do
+    fs @?= FSDir (M.singleton "boo" (Left (FSDir M.empty)))
+    ev @?= [WatchEvent AddedWatchEvent fn startTime]
+  runFS (createDirectoryIfMissingFS False fn >> createDirectoryIfMissingFS False fn) root `isOkLike` \(_, fs, ev) -> do
+    fs @?= FSDir (M.singleton "boo" (Left (FSDir M.empty)))
+    ev @?= [WatchEvent AddedWatchEvent fn startTime, WatchEvent ModifiedWatchEvent fn startTime]
+
 testFS :: TestTree
 testFS = testGroup "fs"
   [ testFSRootExists
   , testFSRead0
-  , testFSWrite0  
+  , testFSWrite0
+  , testFSMkdir0  
   ]
 
 tests :: TestTree
