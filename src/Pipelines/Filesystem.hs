@@ -1,17 +1,17 @@
 module Pipelines.Filesystem
   ( MonadFS(..)
-  , MonadWatch(..)  
+  , MonadWatch(..)
   , Watch(..)
   , WatchEventType(..)
   , WatchEvent(..)
   ) where
 
-import Control.Concurrent.Chan
-import qualified Data.ByteString.Lazy as BL
-import Data.Time.Clock
-import List.Transformer
-import System.Directory
-import qualified System.FSNotify as N
+import           Control.Concurrent.Chan
+import qualified Data.ByteString.Lazy    as BL
+import           Data.Time.Clock
+import           List.Transformer
+import           System.Directory
+import qualified System.FSNotify         as N
 
 class MonadFS b where
   readFileFS :: FilePath -> b BL.ByteString
@@ -30,12 +30,12 @@ data WatchEventType = AddedWatchEvent | ModifiedWatchEvent | RemovedWatchEvent d
 data WatchEvent = WatchEvent
   { _watchEventType :: WatchEventType
   , _watchEventPath :: FilePath
-  , _watchEventTime :: UTCTime                     
+  , _watchEventTime :: UTCTime
   } deriving (Show, Eq)
 
 data Watch b c = Watch
-  { _watchEvents  :: ListT b (WatchEvent, c)
-  , _watchStop    :: b ()
+  { _watchEvents :: ListT b (WatchEvent, c)
+  , _watchStop   :: b ()
   }
 
 instance Monad b => Monoid (Watch b c) where
@@ -65,6 +65,6 @@ class MonadWatch b where
 instance MonadWatch IO where
   watchDir path pred ctx = N.withManager $ \manager -> do
     chan <- newChan
-    stop <- N.watchDirChan manager path (\e -> pred (eventToWatchEvent e)) chan
+    stop <- N.watchDirChan manager path (pred . eventToWatchEvent) chan
     let list = (\e -> (eventToWatchEvent e, ctx)) <$> readChanToList chan
     return $ Watch list stop

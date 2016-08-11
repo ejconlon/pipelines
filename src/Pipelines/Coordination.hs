@@ -1,16 +1,16 @@
-{-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE ConstraintKinds  #-}
 {-# LANGUAGE FlexibleContexts #-}
 
 module Pipelines.Coordination where
 
-import Control.Monad.Base
-import Control.Monad.IO.Class
-import Control.Monad.Reader
-import qualified Data.Map as M
-import List.Transformer
-import Pipelines.Core
-import Pipelines.Execution
-import Pipelines.Filesystem
+import           Control.Monad.Base
+import           Control.Monad.IO.Class
+import           Control.Monad.Reader
+import qualified Data.Map               as M
+import           List.Transformer
+import           Pipelines.Core
+import           Pipelines.Execution
+import           Pipelines.Filesystem
 
 data CoordinationEnv = CoordinationEnv
   { _coordinationEnvBaseDir :: FilePath
