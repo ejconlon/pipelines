@@ -124,7 +124,6 @@ instance A.ToJSON Result where
   toJSON OkResult = A.String "ok"
   toJSON FailResult = A.String "fail"
 
-
 -- | Our position in a Plan's list of Tasks
 data Position =
     StartPos
@@ -233,7 +232,7 @@ currentTask = do
              EndPos -> Nothing
 
 -- | Runs the given Task and updates state
-runTask :: MonadPlan b m => Task -> m Result
+runTask :: MonadPlan b m => Task -> m (Name, Result)
 runTask task = do
   plan <- asks _planEnvPlan
   uid <- asks _planEnvUid
@@ -241,17 +240,17 @@ runTask task = do
   case result of
     FailResult -> modify (\s -> s { _planStatePosition = FailPos })
     OkResult -> advancePosition
-  return result
+  return (_taskName task, result)
 
 -- | Runs the next Task and updates state
-step :: MonadPlan b m => m (Maybe Result)
+step :: MonadPlan b m => m (Maybe (Name, Result))
 step = do
   normalizePosition
   task <- currentTask
   forM task runTask
 
 -- | A list of Task-execution actions
-walk :: MonadPlan b m => ListT m Result
+walk :: MonadPlan b m => ListT m (Name, Result)
 walk = ListT $ do
   done <- isDone
   if done
@@ -289,7 +288,7 @@ listPlanT (ListT mStep) planEnv state = ListT $ do
              Cons a rest -> Cons a $ listPlanT rest planEnv state'
 
 -- | Unfolds a Plan into a sequence of Task-execution actions that yield History
-unfoldPlan :: MonadRunner b => Plan -> Uid b -> ListT b Result
+unfoldPlan :: MonadRunner b => Plan -> Uid b -> ListT b (Name, Result)
 unfoldPlan plan uid = listPlanT walk (PlanEnv plan uid) initialPlanState
 
 -- | Takes at most `n` elements from the ListT (blocks and returns all `n` at once)
@@ -304,7 +303,7 @@ takeListT n (ListT mStep) =
         Cons a rest -> (a:) <$> takeListT (n - 1) rest
 
 -- | Takes at most `n` elements from the Plan execution (blocks and returns all `n` at once)
-takePlan :: MonadRunner b => Int -> Plan -> Uid b -> b [Result]
+takePlan :: MonadRunner b => Int -> Plan -> Uid b -> b [(Name, Result)]
 takePlan n plan uid = takeListT n $ unfoldPlan plan uid
 
 -- | Takes all elements from the ListT (blocks and returns all at once, if at all)
@@ -316,7 +315,7 @@ takeAllListT (ListT mStep) = do
     Cons a rest -> (a:) <$> takeAllListT rest
 
 -- | Takes all elements from the Plan execution (blocks and returns all at once, if at all)
-takeAllPlan :: MonadRunner b => Plan -> Uid b -> b [Result]
+takeAllPlan :: MonadRunner b => Plan -> Uid b -> b [(Name, Result)]
 takeAllPlan plan uid = takeAllListT $ unfoldPlan plan uid
 
 -- | Executes a Plan, discarding the result. May never return.

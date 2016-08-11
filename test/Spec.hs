@@ -2,11 +2,11 @@
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings          #-}
+{-# LANGUAGE TypeFamilies               #-}
 
 import           Control.Monad.Catch
 import           Control.Monad.Catch.Pure
 import           Control.Monad.Reader
-import           Control.Monad.State
 import           Data.Functor.Identity
 import qualified Data.Map.Strict          as M
 import qualified Data.Text                as T
@@ -26,41 +26,27 @@ data ExpectConfig = ExpectConfig
 data NotFoundException = NotFoundException Name deriving (Show, Eq, Typeable)
 instance Exception NotFoundException where
 
-data ExpectState = ExpectState
-  { _expectStateId :: Int
-  } deriving (Show, Eq)
-
-initialExpectState :: ExpectState
-initialExpectState = ExpectState 0
-
-type MonadExpect m = (Monad m, MonadReader ExpectConfig m,
-                      MonadState ExpectState m, MonadThrow m)
+type MonadExpect m = (Monad m, MonadReader ExpectConfig m, MonadThrow m)
 
 newtype ExpectRunner a = ExpectRunner
-  { unExpectRunner :: ReaderT ExpectConfig (StateT ExpectState (CatchT Identity)) a
+  { unExpectRunner :: ReaderT ExpectConfig (CatchT Identity) a
   } deriving (Functor, Applicative, Monad,
-              MonadReader ExpectConfig, MonadState ExpectState, MonadThrow)
+              MonadReader ExpectConfig, MonadThrow)
 
 runExpect :: ExpectRunner a -> ExpectConfig -> Either SomeException a
-runExpect (ExpectRunner r) c =
-  runIdentity (runCatchT (evalStateT (runReaderT r c) initialExpectState))
+runExpect (ExpectRunner r) c = runIdentity $ runCatchT $ runReaderT r c
 
-expectHistory :: MonadExpect m => Name -> Result -> m History
-expectHistory name result = do
-  curId <- gets _expectStateId
-  modify (\s -> s { _expectStateId = _expectStateId s + 1 })
-  return $ History name (T.pack (show curId)) result
-
-expectRunner :: MonadExpect m => Runner m
-expectRunner _ _ task = do
+expectRunner :: MonadExpect m => Task -> m Result
+expectRunner task = do
   let name = _taskName task
   look <- asks _expectConfigLookup
   case look name of
-    Nothing -> throwM $ NotFoundException name
-    Just result -> expectHistory name result
+    Nothing -> throwM (NotFoundException name)
+    Just r -> return r
 
 instance MonadRunner ExpectRunner where
-  runner = expectRunner
+  data Uid ExpectRunner = Unit
+  runner _ task Unit = expectRunner task
 
 -- | A simple 3-task plan
 simplePlan :: Plan
@@ -79,11 +65,11 @@ testSimple = testCase "simple" $ do
   let look _ = Just OkResult
       config = ExpectConfig look
       expected =
-        [ History "taskA" "0" OkResult
-        , History "taskB" "1" OkResult
-        , History "taskC" "2" OkResult
+        [ ("taskA", OkResult)
+        , ("taskB", OkResult)
+        , ("taskC", OkResult)
         ]
-      taken = takeAllPlan simplePlan
+      taken = takeAllPlan simplePlan Unit
       actual = runExpect taken config
   case actual of
     Left e -> fail $ "got exception " ++ show e
