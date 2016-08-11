@@ -157,7 +157,7 @@ initialPlanState = PlanState StartPos
 -- An implementation for tests might work over State and yield fake history.
 class Monad b => MonadRunner b where
   data Uid b :: *
-  runner :: Plan -> Task -> Uid b -> b Result
+  runner :: Task -> Uid b -> b Result
 
 -- | A typeclass to wrangle our Plan operations
 type MonadPlan b m = (MonadRunner b, MonadBase b m,
@@ -236,7 +236,7 @@ runTask :: MonadPlan b m => Task -> m (Name, Result)
 runTask task = do
   plan <- asks _planEnvPlan
   uid <- asks _planEnvUid
-  result <- liftBase $ runner plan task uid
+  result <- liftBase $ runner task uid
   case result of
     FailResult -> modify (\s -> s { _planStatePosition = FailPos })
     OkResult -> advancePosition

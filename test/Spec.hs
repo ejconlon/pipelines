@@ -46,7 +46,7 @@ expectRunner task = do
 
 instance MonadRunner ExpectRunner where
   data Uid ExpectRunner = Unit
-  runner _ task Unit = expectRunner task
+  runner task Unit = expectRunner task
 
 -- | A simple 3-task plan
 simplePlan :: Plan
