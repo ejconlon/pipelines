@@ -49,7 +49,7 @@ class MonadFS b where
   doesFileExistFS :: FilePath -> b Bool
   doesDirectoryExistFS :: FilePath -> b Bool
   createDirectoryIfMissingFS :: Bool -> FilePath -> b ()
-  renameFileFS :: FilePath -> FilePath -> b ()
+  -- renameFileFS :: FilePath -> FilePath -> b ()
 
 touchFS :: MonadFS b => FilePath -> b ()
 touchFS path = writeFileFS path BL.empty
@@ -60,7 +60,7 @@ instance MonadFS IO where
   doesFileExistFS = doesFileExist
   doesDirectoryExistFS = doesDirectoryExist
   createDirectoryIfMissingFS = createDirectoryIfMissing
-  renameFileFS = renameFile
+  -- renameFileFS = renameFile
 
 data FSFile = FSFile BL.ByteString deriving (Show, Eq)
 
@@ -184,8 +184,8 @@ createDirectoryIfMissingFST mkParents path = do
   newRoot <- liftBase $ mkDirParts mkParents path parts root
   put newRoot
 
-renameFileFST :: FilePath -> FilePath -> FakeFST b ()
-renameFileFST = undefined
+-- renameFileFST :: FilePath -> FilePath -> FakeFST b ()
+-- renameFileFST = undefined
 
 instance MonadThrow b => MonadFS (FakeFST b) where
   readFileFS = readFileFST
@@ -193,7 +193,7 @@ instance MonadThrow b => MonadFS (FakeFST b) where
   doesFileExistFS = doesFileExistFST
   doesDirectoryExistFS = doesDirectoryExistFST
   createDirectoryIfMissingFS = createDirectoryIfMissingFST
-  renameFileFS = renameFileFST
+  -- renameFileFS = renameFileFST
 
 runFakeFST :: FakeFST b a -> UTCTime -> FSDir -> b (a, FSDir, [WatchEvent]) 
 runFakeFST (FakeFST x) = runRWST x
