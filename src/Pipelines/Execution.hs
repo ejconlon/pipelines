@@ -5,7 +5,7 @@
 {-# LANGUAGE MultiParamTypeClasses      #-}
 {-# LANGUAGE OverloadedStrings          #-}
 
-module Pipelines.Watcher where
+module Pipelines.Execution where
 
 import           Control.Monad.Base
 import           Control.Monad.Catch

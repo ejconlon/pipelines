@@ -16,8 +16,8 @@ library
   hs-source-dirs:      src
   exposed-modules:     Pipelines
                      , Pipelines.Core
+                     , Pipelines.Execution
                      , Pipelines.Local
-                     , Pipelines.Watcher
   build-depends:       base >= 4.7 && < 5
                      , aeson
                      , bytestring
