@@ -20,8 +20,7 @@ import System.FilePath
 
 data ExecutionEnv = ExecutionEnv
   { _executionEnvPlan    :: Plan
-  , _executionEnvBaseDir :: FilePath
-  , _executionEnvName    :: Name
+  , _executionEnvPlanDir :: FilePath
   , _executionEnvInput   :: FilePath
   } deriving (Show, Eq)
 
@@ -45,28 +44,33 @@ instance A.ToJSON ExecutionState where
 
 type MonadExecution m = (Monad m, MonadIO m, MonadReader ExecutionEnv m, MonadRunner m, MonadThrow m)
 
+asksName :: MonadReader ExecutionEnv m => m Name
+asksName = do
+  input <- asks _executionEnvInput
+  return $ T.pack $ takeBaseName input
+
 askStateFile :: MonadReader ExecutionEnv m => m FilePath
 askStateFile = do
-  base <- asks _executionEnvBaseDir
-  name <- asks _executionEnvName
-  return $ base </> "state" </> T.unpack name </> ".json"
+  planDir <- asks _executionEnvPlanDir
+  name <- asksName
+  return $ planDir </> "state" </> T.unpack name </> ".json"
 
 askTaskBaseDir :: MonadReader ExecutionEnv m => m FilePath
 askTaskBaseDir = do
-  base <- asks _executionEnvBaseDir
-  return $ base </> "tasks"
+  planDir <- asks _executionEnvPlanDir
+  return $ planDir </> "tasks"
 
 askTaskDir :: MonadReader ExecutionEnv m => Task -> m FilePath
 askTaskDir task = do
   taskBase <- askTaskBaseDir
-  name <- asks _executionEnvName
+  name <- asksName
   return $ taskBase </> T.unpack name
 
 askArchiveFile :: MonadReader ExecutionEnv m => m FilePath
 askArchiveFile = do
-  base <- asks _executionEnvBaseDir
+  planDir <- asks _executionEnvPlanDir
   input <- asks _executionEnvInput
-  return $ replaceDirectory input $ base </> "archive"
+  return $ replaceDirectory input $ planDir </> "archive"
 
 writeState :: MonadExecution m => ExecutionState -> m ()
 writeState state = do
