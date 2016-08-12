@@ -62,6 +62,15 @@ instance Monad b => MonadBase b (CoordinationT b) where
 runCoordinationT :: Monad b => CoordinationT b a -> CoordinationEnv -> b a
 runCoordinationT (CoordinationT x) = runReaderT x
 
+-- | Fair >>=
+class Monad b => MonadDiagonal b where
+  diagonal :: ListT b x -> (x -> ListT b y) -> ListT b y
+  -- interleave :: ListT b x -> ListT b x -> ListT b x
+  -- interleaveAll :: [ListT b x] -> ListT b x
+
+instance MonadDiagonal IO where
+  diagonal l f = l >>= f  -- TODO there must be a fair version of this
+
 coordinate :: (MonadFS b, MonadWatch b, MonadThrow b) => FilePath -> [Plan] -> b (Watch b (Plan, ExecutionEnv))
 coordinate path plans = do
   let env = CoordinationEnv path plans

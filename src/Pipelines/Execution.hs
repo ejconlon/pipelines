@@ -121,9 +121,23 @@ instance MonadTrans ExecutionT where
 instance Monad b => MonadBase b (ExecutionT b) where
   liftBase = lift
 
--- instance MonadRunner b => MonadRunner (ExecutionT b) where
---   data Uid (ExecutionT b) = Wrap (Uid b)
---   runner task (Wrap uid) = lift (runner task uid)
+-- TODO
+class Monad b => MonadCommand b where
+  command :: Action -> b Result
+
+instance (MonadCommand b, MonadFS b) => MonadRunner (ExecutionT b) where
+  data Uid (ExecutionT b) = Unit
+  runner task _ = liftBase $ command (_taskAction task)
 
 runExecutionT :: ExecutionT b a -> ExecutionEnv -> b a
 runExecutionT (ExecutionT e) = runReaderT e
+
+listExecutionT :: Monad b => ListT (ExecutionT b) a -> ExecutionEnv -> ListT b a
+listExecutionT (ListT mStep) exEnv = ListT $ do
+  step <- runExecutionT mStep exEnv
+  return $ case step of
+             Nil -> Nil
+             Cons a rest -> Cons a $ listExecutionT rest exEnv
+
+execute :: (MonadCommand b, MonadFS b) => Plan -> ExecutionEnv -> ListT b (Name, Result)
+execute plan env = listExecutionT (unfoldPlan plan undefined) env -- TODO we can get rid of uid

@@ -211,6 +211,7 @@ data Watch b c = Watch
   , _watchStop   :: b ()
   }
 
+-- TODO is <|> fair?
 instance Monad b => Monoid (Watch b c) where
   mempty = Watch (ListT (return Nil)) (return ())
   mappend (Watch e1 s1) (Watch e2 s2) = Watch (e1 <|> e2) (s1 >> s2)
@@ -231,6 +232,9 @@ readChanToList :: Chan a -> ListT IO a
 readChanToList c = ListT $ do
   value <- readChan c
   return $ Cons value $ readChanToList c
+
+writeListToChan :: ListT IO a -> Chan a -> IO ()
+writeListToChan = undefined
 
 class MonadWatch b where
   watchDir :: FilePath -> (WatchEvent -> Bool) -> (WatchEvent -> c) -> b (Watch b c)
