@@ -1,21 +1,21 @@
-{-# LANGUAGE ConstraintKinds #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE ConstraintKinds            #-}
+{-# LANGUAGE FlexibleContexts           #-}
+{-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE MultiParamTypeClasses      #-}
 
 module Pipelines.Coordination where
 
-import Control.Monad.Base
-import Control.Monad.Catch
-import Control.Monad.IO.Class
-import Control.Monad.Reader
-import qualified Data.Text as T
-import List.Transformer
-import Pipelines.Core
-import Pipelines.Execution
-import Pipelines.Filesystem
-import System.FilePath
+import           Control.Monad.Base
+import           Control.Monad.Catch
+import           Control.Monad.IO.Class
+import           Control.Monad.Reader
+import qualified Data.Text              as T
+import           List.Transformer
+import           Pipelines.Core
+import           Pipelines.Execution
+import           Pipelines.Filesystem
+import           System.FilePath
 
 data CoordinationEnv = CoordinationEnv
   { _coordinationEnvBaseDir :: FilePath
@@ -34,7 +34,7 @@ initializeDirs = do
   forM_ planDirs $ \planDir -> do
     liftBase $ createDirectoryIfMissingFS False planDir
     forM_ ["input", "state", "tasks", "archive"] $ \subName ->
-      liftBase $ createDirectoryIfMissingFS False $ planDir </> subName                                                  
+      liftBase $ createDirectoryIfMissingFS False $ planDir </> subName
 
 watch :: MonadCoordination b m => m (Watch b (Plan, ExecutionEnv))
 watch = do

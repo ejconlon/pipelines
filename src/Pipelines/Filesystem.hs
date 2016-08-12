@@ -1,5 +1,5 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE FlexibleInstances          #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses      #-}
 
 module Pipelines.Filesystem where
@@ -137,7 +137,7 @@ mkDirParts mkParents path (p:ps) (FSDir m) =
         then do
           child <- mkDirParts mkParents path ps emptyFSDir
           return $ FSDir $ M.insert p (Left child) m
-        else throwM $ MissingParent path  
+        else throwM $ MissingParent path
 
 getEntity :: Monad b => FilePath -> FakeFST b (Maybe FSEntity)
 getEntity path = do
@@ -161,7 +161,7 @@ writeFileFST path contents = do
   newRoot <- liftBase $ writeFileParts path parts contents root
   put newRoot
   tell [WatchEvent (if exists then ModifiedWatchEvent else AddedWatchEvent) path time]
-        
+
 doesFileExistFST :: Monad b => FilePath -> FakeFST b Bool
 doesFileExistFST path = do
   entity <- getEntity path
@@ -195,7 +195,7 @@ instance MonadThrow b => MonadFS (FakeFST b) where
   createDirectoryIfMissingFS = createDirectoryIfMissingFST
   -- renameFileFS = renameFileFST
 
-runFakeFST :: FakeFST b a -> UTCTime -> FSDir -> b (a, FSDir, [WatchEvent]) 
+runFakeFST :: FakeFST b a -> UTCTime -> FSDir -> b (a, FSDir, [WatchEvent])
 runFakeFST (FakeFST x) = runRWST x
 
 data WatchEventType = AddedWatchEvent | ModifiedWatchEvent | RemovedWatchEvent deriving (Show, Eq)

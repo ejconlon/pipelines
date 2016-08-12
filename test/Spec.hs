@@ -4,10 +4,10 @@
 {-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE TypeFamilies               #-}
 
-import qualified Data.ByteString.Lazy.Char8 as BLC
 import           Control.Monad.Catch
 import           Control.Monad.Catch.Pure
 import           Control.Monad.Reader
+import qualified Data.ByteString.Lazy.Char8 as BLC
 import           Data.Functor.Identity
 import qualified Data.Map.Strict            as M
 import qualified Data.Text                  as T
@@ -185,7 +185,7 @@ testFS = testGroup "fs"
 tests :: TestTree
 tests = testGroup "tests"
   [ testSimple
-  , testFS  
+  , testFS
   ]
 
 main :: IO ()
