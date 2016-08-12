@@ -34,24 +34,59 @@ run web interface that can
 -}
 module Pipelines.Local where
 
+import Control.Monad.Catch
 import Control.Monad.IO.Class
 import Control.Monad.Reader
-import Pipelines.Core
+import qualified Data.Aeson as A
+import Data.Typeable
+import qualified Data.Text as T
+import Options.Applicative
+import List.Transformer
+import Pipelines.Common
+import Pipelines.Coordination
+import Pipelines.Execution
+import Pipelines.Filesystem
+import Pipelines.Types
 
-data LocalConfig = LocalConfig { }
+data Options = Options
+  { _optionsBaseDir  :: FilePath
+  , _optionsPlanFile :: FilePath
+  } deriving (Show, Eq)
 
-type MonadLocal m = (Monad m, MonadReader LocalConfig m, MonadIO m)
+opts :: Parser Options
+opts =
+  Options <$>
+    strOption (long "base" <> metavar "BASE" <> help "path to listen to") <*>
+    strOption (long "plan" <> metavar "PLAN" <> help "plan")
 
-newtype LocalRunner a = LocalRunner
-  { unLocalRunner :: ReaderT LocalConfig IO a }
-  deriving (Functor, Applicative, Monad, MonadReader LocalConfig, MonadIO)
-
---localRunner :: MonadLocal m => Plan -> [History] -> Task -> m History
---localRunner = undefined
-
---instance MonadRunner LocalRunner where
---  runner = localRunner
-
--- TODO parse config and Plan
+instance MonadCommand IO where
+  command action = putStrLn (T.unpack action) >> return OkResult
+  
 runLocal :: IO ()
-runLocal = return ()
+runLocal = execParser parser >>= convert >>= process >>= drain
+  where
+    parser = info (helper <*> opts)
+      ( fullDesc
+        <> progDesc "Run each PLAN under the BASE directory"
+        <> header "pipelines" )
+
+data FailedToDecode = FailedToDecode FilePath deriving (Show, Eq, Typeable)
+instance Exception FailedToDecode
+
+convert :: (MonadFS m, MonadThrow m) => Options -> m CoordinationEnv
+convert (Options baseDir planFile) = do
+  createDirectoryIfMissingFS False baseDir
+  contents <- readFileFS planFile
+  case A.decode contents of
+    Nothing -> throwM $ FailedToDecode planFile
+    Just plan -> return $ CoordinationEnv baseDir plan
+
+process :: (MonadFS m, MonadWatch m, MonadThrow m, MonadCommand m) =>
+           CoordinationEnv -> m (Watch m (Plan, Task, Result))
+process (CoordinationEnv dir plans) = do
+  Watch list stop <- coordinate dir plans
+  let list2 = list >>= \(plan, env) -> execute plan env >>= \(task, result) -> return (plan, task, result)
+  return (Watch list2 stop)
+
+drain :: Monad m => Watch m a -> m ()
+drain (Watch list stop) = runListT list >> stop

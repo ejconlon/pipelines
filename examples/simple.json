@@ -1,0 +1,22 @@
+{
+    "name": "simple",
+    "tasks": [
+	{
+	    "name": "taskA",
+	    "action": "actionA",
+	    "timeout": 1
+	},
+	{
+	    "name": "taskB",
+	    "action": "actionB",
+	    "timeout": 2
+	},
+	{
+	    "name": "taskC",
+	    "action": "actionC",
+	    "timeout": 3
+	}
+    ],
+    "loop": "stop"
+}
+    

@@ -1,5 +1,6 @@
 module Pipelines.Coordination
-  ( coordinate
+  ( CoordinationEnv(..)
+  , coordinate
   ) where
 
 import           Control.Monad.Base
@@ -16,7 +17,7 @@ import           System.FilePath
 
 data CoordinationEnv = CoordinationEnv
   { _coordinationEnvBaseDir :: FilePath
-  , _coordinationEnvPlans   :: [Plan]
+  , _coordinationEnvPlan    :: Plan
   } deriving (Show, Eq)
 
 type MonadCoordination b m = (Monad b, MonadWatch b, MonadFS b, Monad m, MonadBase b m,
@@ -26,23 +27,21 @@ initializeDirs :: MonadCoordination b m => m ()
 initializeDirs = do
   baseDir <- asks _coordinationEnvBaseDir
   liftBase $ createDirectoryIfMissingFS True baseDir
-  plans <- asks _coordinationEnvPlans
-  let planDirs = (baseDir </>) . T.unpack . _planName <$> plans
-  forM_ planDirs $ \planDir -> do
-    liftBase $ createDirectoryIfMissingFS False planDir
-    forM_ ["input", "state", "tasks", "archive"] $ \subName ->
-      liftBase $ createDirectoryIfMissingFS False $ planDir </> subName
+  plan <- asks _coordinationEnvPlan
+  let planDir = (baseDir </>) . T.unpack . _planName $ plan
+  liftBase $ createDirectoryIfMissingFS False planDir
+  forM_ ["input", "state", "tasks", "archive"] $ \subName ->
+    liftBase $ createDirectoryIfMissingFS False $ planDir </> subName
 
 watch :: MonadCoordination b m => m (Watch b (Plan, ExecutionEnv))
 watch = do
   baseDir <- asks _coordinationEnvBaseDir
-  plans <- asks _coordinationEnvPlans
-  watches <- forM plans $ \plan -> do
-    let planName = _planName plan
-        planDir = baseDir </> T.unpack planName
-        planInputsDir = planDir </> "input"
-    liftBase $ watchDir planInputsDir (const True) (\e -> (plan, ExecutionEnv planDir (_watchEventPath e)))
-  return $ mconcat watches
+  plan <- asks _coordinationEnvPlan
+  let planName = _planName plan
+      planDir = baseDir </> T.unpack planName
+      planInputsDir = planDir </> "input"
+  watch <- liftBase $ watchDir planInputsDir (const True)
+  return $ (\e -> (plan, ExecutionEnv planDir (_watchEventPath e))) <$> watch
 
 newtype CoordinationT b a = CoordinationT
   { unCoordinationT :: ReaderT CoordinationEnv b a
@@ -59,8 +58,8 @@ instance Monad b => MonadBase b (CoordinationT b) where
 runCoordinationT :: Monad b => CoordinationT b a -> CoordinationEnv -> b a
 runCoordinationT (CoordinationT x) = runReaderT x
 
-coordinate :: (MonadFS b, MonadWatch b, MonadThrow b) => FilePath -> [Plan] -> b (Watch b (Plan, ExecutionEnv))
-coordinate path plans = do
-  let env = CoordinationEnv path plans
+coordinate :: (MonadFS b, MonadWatch b, MonadThrow b) => FilePath -> Plan -> b (Watch b (Plan, ExecutionEnv))
+coordinate baseDir plan = do
+  let env = CoordinationEnv baseDir plan
       action = initializeDirs >> watch
   runCoordinationT action env

@@ -107,23 +107,23 @@ currentTask = do
              EndPos -> Nothing
 
 -- | Runs the given Task and updates state
-runTask :: MonadPlan b m => Task -> m (Name, Result)
+runTask :: MonadPlan b m => Task -> m (Task, Result)
 runTask task = do
   result <- liftBase $ runner task
   case result of
     FailResult -> modify (\s -> s { _planStatePosition = FailPos })
     OkResult -> advancePosition
-  return (_taskName task, result)
+  return (task, result)
 
 -- | Runs the next Task and updates state
-step :: MonadPlan b m => m (Maybe (Name, Result))
+step :: MonadPlan b m => m (Maybe (Task, Result))
 step = do
   normalizePosition
   task <- currentTask
   forM task runTask
 
 -- | A list of Task-execution actions
-walk :: MonadPlan b m => ListT m (Name, Result)
+walk :: MonadPlan b m => ListT m (Task, Result)
 walk = ListT $ do
   done <- isDone
   if done
@@ -161,5 +161,5 @@ listPlanT (ListT mStep) plan state = ListT $ do
              Cons a rest -> Cons a $ listPlanT rest plan state'
 
 -- | Unfolds a Plan into a sequence of Task-execution actions that yield History
-unfoldPlan :: MonadRunner b => Plan -> ListT b (Name, Result)
+unfoldPlan :: MonadRunner b => Plan -> ListT b (Task, Result)
 unfoldPlan plan = listPlanT walk plan initialPlanState

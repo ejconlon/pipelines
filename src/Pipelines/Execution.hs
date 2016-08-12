@@ -136,5 +136,5 @@ listExecutionT (ListT mStep) exEnv = ListT $ do
              Nil -> Nil
              Cons a rest -> Cons a $ listExecutionT rest exEnv
 
-execute :: (MonadCommand b, MonadFS b) => Plan -> ExecutionEnv -> ListT b (Name, Result)
+execute :: (MonadCommand b, MonadFS b) => Plan -> ExecutionEnv -> ListT b (Task, Result)
 execute = listExecutionT . unfoldPlan

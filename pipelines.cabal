@@ -31,7 +31,7 @@ library
                      , filepath
                      , fsnotify
                      , list-transformer
-                     --, optparse-applicative
+                     , optparse-applicative
                      , mtl
                      , text
                      , time

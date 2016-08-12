@@ -3,10 +3,10 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings          #-}
 
+import qualified Data.ByteString.Lazy.Char8 as BLC
 import           Control.Monad.Catch
 import           Control.Monad.Catch.Pure
 import           Control.Monad.Reader
-import qualified Data.ByteString.Lazy.Char8 as BLC
 import           Data.Functor.Identity
 import qualified Data.Map.Strict            as M
 import qualified Data.Text                  as T
@@ -67,28 +67,25 @@ expectRunner task = do
 instance MonadRunner ExpectRunner where
   runner = expectRunner
 
--- | A simple 3-task plan
-simplePlan :: Plan
-simplePlan = Plan
-  { _planName = "simplePlan"
-  , _planTasks = [ Task "taskA" "actionA" 1
-                 , Task "taskB" "actionB" 2
-                 , Task "taskC" "actionC" 3
-                 ]
-  , _planLoop = StopLoop
-  }
-
 -- | Assert we can successfully run our 3 tasks
 testSimple :: TestTree
 testSimple = testCase "simple" $ do
-  let look _ = Just OkResult
+  let taskA = Task "taskA" "actionA" 1
+      taskB = Task "taskB" "actionB" 2
+      taskC = Task "taskC" "actionC" 3
+      plan = Plan
+        { _planName = "simplePlan"
+        , _planTasks = [ taskA, taskB, taskC ]
+        , _planLoop = StopLoop
+        }
+      look _ = Just OkResult
       config = ExpectConfig look
       expected =
-        [ ("taskA", OkResult)
-        , ("taskB", OkResult)
-        , ("taskC", OkResult)
+        [ (taskA, OkResult)
+        , (taskB, OkResult)
+        , (taskC, OkResult)
         ]
-      taken = takeAllListT $ unfoldPlan simplePlan
+      taken = takeAllListT $ unfoldPlan plan
       actual = runExpect taken config
   actual `isOk` expected
 
@@ -184,7 +181,7 @@ testFS = testGroup "fs"
 tests :: TestTree
 tests = testGroup "tests"
   [ testSimple
-  , testFS
+  , testFS  
   ]
 
 main :: IO ()

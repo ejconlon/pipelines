@@ -1,8 +1,10 @@
+{-# LANGUAGE DeriveFunctor #-}
+
 module Pipelines.Types where
 
-import           Data.Aeson       ((.:), (.=))
 import qualified Data.Aeson       as A
 import qualified Data.Aeson.Types as A
+import           Data.Aeson       ((.:), (.=))
 import qualified Data.Text        as T
 import           List.Transformer
 
@@ -91,12 +93,12 @@ instance A.FromJSON Result where
 
 instance A.ToJSON Result where
   toJSON OkResult = A.String "ok"
-  toJSON FailResult = A.String "fail"
+  toJSON FailResult = A.String "fail"  
 
 data Watch b c = Watch
   { _watchEvents :: ListT b c
   , _watchStop   :: b ()
-  }
+  } deriving (Functor)
 
 -- TODO is <|> fair?
 instance Monad b => Monoid (Watch b c) where

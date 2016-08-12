@@ -219,11 +219,11 @@ watchEventToEvent (WatchEvent ty p t) =
     RemovedWatchEvent -> N.Removed p t
 
 class MonadWatch b where
-  watchDir :: FilePath -> (WatchEvent -> Bool) -> (WatchEvent -> c) -> b (Watch b c)
+  watchDir :: FilePath -> (WatchEvent -> Bool) -> b (Watch b WatchEvent)
 
 instance MonadWatch IO where
-  watchDir path pred fn = N.withManager $ \manager -> do
+  watchDir path pred = N.withManager $ \manager -> do
     chan <- newChan
     stop <- N.watchDirChan manager path (pred . eventToWatchEvent) chan
-    let list = fn . eventToWatchEvent <$> readChanToList chan
+    let list = eventToWatchEvent <$> readChanToList chan
     return $ Watch list stop
