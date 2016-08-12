@@ -21,9 +21,10 @@ import qualified Data.ByteString.Lazy   as BL
 import qualified Data.Set               as S
 import qualified Data.Text              as T
 import           List.Transformer
-import           Pipelines.Command
+import           Pipelines.Common
 import           Pipelines.Core
 import           Pipelines.Filesystem
+import           Pipelines.Types
 import           System.FilePath
 
 -- | Relevant information about the completed execution of a Task

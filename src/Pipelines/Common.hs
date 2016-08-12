@@ -2,6 +2,7 @@ module Pipelines.Common where
 
 import Control.Concurrent.Chan
 import List.Transformer
+import Pipelines.Types
 
 -- | Takes at most `n` elements from the ListT (blocks and returns all `n` at once)
 takeListT :: Monad b => Int -> ListT b a -> b [a]
@@ -22,6 +23,11 @@ takeAllListT (ListT mStep) = do
     Nil -> return []
     Cons a rest -> (a:) <$> takeAllListT rest
 
+readChanToList :: Chan a -> ListT IO a
+readChanToList c = ListT $ do
+  value <- readChan c
+  return $ Cons value $ readChanToList c
+
 -- | Supposed to be a fair >>=
 class Monad b => MonadDiagonal b where
   diagonal :: ListT b x -> (x -> ListT b y) -> ListT b y
@@ -31,17 +37,14 @@ class Monad b => MonadDiagonal b where
 instance MonadDiagonal IO where
   diagonal l f = l >>= f  -- TODO there must be a fair version of this
 
-data Watch b c = Watch
-  { _watchEvents :: ListT b c
-  , _watchStop   :: b ()
-  }
+class Monad b => MonadCommand b where
+  command :: Action -> b Result
 
--- TODO is <|> fair?
-instance Monad b => Monoid (Watch b c) where
-  mempty = Watch (ListT (return Nil)) (return ())
-  mappend (Watch e1 s1) (Watch e2 s2) = Watch (e1 <|> e2) (s1 >> s2)
-
-readChanToList :: Chan a -> ListT IO a
-readChanToList c = ListT $ do
-  value <- readChan c
-  return $ Cons value $ readChanToList c
+-- | The thing that actually runs tasks.
+-- Given a plan name and a stack of task results,
+-- runs a plan and returns a result in context.
+-- Newtype this to control how tasks are run:
+-- A real implementation might work in IO over the filesystem.
+-- An implementation for tests might work over State and yield fake history.
+class Monad b => MonadRunner b where
+  runner :: Task -> b Result

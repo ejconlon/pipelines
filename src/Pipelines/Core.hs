@@ -7,13 +7,7 @@
 
 -- | Utilities to define and run pipelines of tasks.
 module Pipelines.Core
-  ( MonadRunner(..)
-  , Name
-  , Interval
-  , Task(..)
-  , Loop(..)
-  , Plan(..)
-  , unfoldPlan
+  ( unfoldPlan
   ) where
 
 import           Control.Exception
@@ -27,75 +21,8 @@ import qualified Data.Aeson             as A
 import qualified Data.Aeson.Types       as A
 import qualified Data.Text              as T
 import           List.Transformer
-import           Pipelines.Command
-
--- | A stringy identifier for a Plan or a Task
-type Name = T.Text
-
--- | A duration for which we can set Task timeouts
-type Interval = Int
-
--- | A named unit of work
-data Task = Task
-  { _taskName    :: Name
-  , _taskAction  :: Action
-  , _taskTimeout :: Interval
-  } deriving (Show, Eq)
-
-instance A.FromJSON Task where
-  parseJSON (A.Object m) =
-    Task <$>
-      m .: "name"    <*>
-      m .: "action"  <*>
-      m .: "timeout"
-  parseJSON invalid = A.typeMismatch "Task" invalid
-
-instance A.ToJSON Task where
-  toJSON (Task name action timeout) = A.object
-    [ "name" .= name
-    , "action" .= action
-    , "timeout" .= timeout
-    ]
-
--- | Indicates whether a Plan should loop forever or stop
-data Loop
-  = StopLoop
-  | ContinueLoop
-  deriving (Show, Eq)
-
-instance A.FromJSON Loop where
-  parseJSON (A.String t) =
-    case t of
-      "stop" -> return StopLoop
-      "continue" -> return ContinueLoop
-      _ -> fail ("invalid Loop " ++ T.unpack t)
-  parseJSON invalid = A.typeMismatch "Loop" invalid
-
-instance A.ToJSON Loop where
-  toJSON StopLoop = A.String "stop"
-  toJSON ContinueLoop = A.String "continue"
-
--- | A sequence of tasks
-data Plan = Plan
-  { _planName  :: Name
-  , _planTasks :: [Task]
-  , _planLoop  :: Loop
-  } deriving (Show, Eq)
-
-instance A.FromJSON Plan where
-  parseJSON (A.Object m) =
-    Plan <$>
-      m .: "name"  <*>
-      m .: "tasks" <*>
-      m .: "loop"
-  parseJSON invalid = A.typeMismatch "Plan" invalid
-
-instance A.ToJSON Plan where
-  toJSON (Plan name tasks loop) = A.object
-    [ "name" .= name
-    , "tasks" .= tasks
-    , "loop" .= loop
-    ]
+import           Pipelines.Common
+import           Pipelines.Types
 
 -- | Our position in a Plan's list of Tasks
 data Position =
@@ -113,15 +40,6 @@ data PlanState = PlanState
 -- | The default plan state: no history and at starting position
 initialPlanState :: PlanState
 initialPlanState = PlanState StartPos
-
--- | The thing that actually runs tasks.
--- Given a plan name and a stack of task results,
--- runs a plan and returns a result in context.
--- Newtype this to control how tasks are run:
--- A real implementation might work in IO over the filesystem.
--- An implementation for tests might work over State and yield fake history.
-class Monad b => MonadRunner b where
-  runner :: Task -> b Result
 
 -- | A typeclass to wrangle our Plan operations
 type MonadPlan b m = (MonadRunner b, MonadBase b m,

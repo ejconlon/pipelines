@@ -15,9 +15,9 @@ import           Control.Monad.Reader
 import qualified Data.Text              as T
 import           List.Transformer
 import           Pipelines.Common
-import           Pipelines.Core
 import           Pipelines.Execution
 import           Pipelines.Filesystem
+import           Pipelines.Types
 import           System.FilePath
 
 data CoordinationEnv = CoordinationEnv

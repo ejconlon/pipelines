@@ -19,6 +19,7 @@ import           Data.Time.Clock
 import           Data.Typeable
 import           List.Transformer
 import           Pipelines.Common
+import           Pipelines.Types
 import           System.Directory
 import           System.FilePath.Posix
 import qualified System.FSNotify          as N
