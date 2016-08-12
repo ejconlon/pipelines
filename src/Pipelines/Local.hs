@@ -47,6 +47,7 @@ import Pipelines.Coordination
 import Pipelines.Execution
 import Pipelines.Filesystem
 import Pipelines.Types
+import qualified Turtle as TT
 
 data Options = Options
   { _optionsBaseDir  :: FilePath
@@ -60,7 +61,11 @@ opts =
     strOption (long "plan" <> metavar "PLAN" <> help "plan")
 
 instance MonadCommand IO where
-  command path action timeout = putStrLn (T.unpack action) >> return OkResult
+  command path action timeout = do
+    code <- TT.shell action mempty
+    return $ case code of
+               TT.ExitSuccess -> OkResult
+               TT.ExitFailure _ -> FailResult
   
 runLocal :: IO ()
 runLocal = execParser parser >>= convert >>= process >>= drain

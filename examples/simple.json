@@ -3,17 +3,17 @@
     "tasks": [
 	{
 	    "name": "taskA",
-	    "action": "actionA",
+	    "action": "whoami",
 	    "timeout": 1
 	},
 	{
 	    "name": "taskB",
-	    "action": "actionB",
+	    "action": "pwd",
 	    "timeout": 2
 	},
 	{
 	    "name": "taskC",
-	    "action": "actionC",
+	    "action": "ls",
 	    "timeout": 3
 	}
     ],
