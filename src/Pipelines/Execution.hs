@@ -101,7 +101,9 @@ setup :: MonadExecution b m => m ()
 setup = do
   executionDir <- askExecutionDir
   liftBase $ createDirectoryIfMissingFS False executionDir
-  -- TODO mv input to execution dir
+  input <- asks _executionEnvInput
+  let inputCopy = executionDir </> takeBaseName input <.> takeExtension input
+  liftBase $ copyFileFS input inputCopy
   writeState
 
 newtype ExecutionT b a = ExecutionT
