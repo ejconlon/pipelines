@@ -5,10 +5,12 @@ A utility for running workflows.  See `examples/simple.json` for a simple plan d
 
 To watch and execute that plan:
 
-    stack build && stack exec -- stack exec pipelines-exe -- --base=/tmp/pipelines --plan=examples/simple.json &
-    touch /tmp/pipelines/simple/inputs/hello.txt
-    cat /tmp/pipelines/simple/executions/hello/state.json
-    fg
+    stack build && stack exec -- stack exec pipelines-exe -- --base=/tmp/pipelines --plan=examples/simple.json
+
+And in another terminal:
+
+    touch /tmp/pipelines/simple/input/hello.txt
+    cat /tmp/pipelines/simple/execution/hello/state.json
 
 TODO
 ----
