@@ -4,10 +4,6 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses      #-}
 {-# LANGUAGE OverloadedStrings          #-}
-{-# LANGUAGE Rank2Types                 #-}
-{-# LANGUAGE StandaloneDeriving         #-}
-{-# LANGUAGE TypeFamilies               #-}
-{-# LANGUAGE UndecidableInstances       #-}
 
 -- | Utilities to define and run pipelines of tasks.
 module Pipelines.Core
@@ -180,8 +176,8 @@ isDone = (\p -> p == EndPos || p == FailPos) <$> gets _planStatePosition
 -- | Updates our state to point to the next Task to be run
 advancePosition :: MonadPlan b m => m ()
 advancePosition = do
-  tasks <- asks $ _planTasks
-  loop <- asks $ _planLoop
+  tasks <- asks _planTasks
+  loop <- asks _planLoop
   position <- gets _planStatePosition
   case position of
     StartPos -> do
@@ -212,7 +208,7 @@ normalizePosition = do
 -- | Finds the current task
 currentTask :: MonadPlan b m => m (Maybe Task)
 currentTask = do
-  tasks <- asks $ _planTasks
+  tasks <- asks _planTasks
   position <- gets _planStatePosition
   return $ case position of
              StartPos -> Nothing

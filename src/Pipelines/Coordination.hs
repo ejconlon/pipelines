@@ -33,7 +33,7 @@ initializeDirs = do
   let planDirs = (baseDir </>) . T.unpack . _planName <$> plans
   forM_ planDirs $ \planDir -> do
     liftBase $ createDirectoryIfMissingFS False planDir
-    forM_ ["input", "state", "tasks", "archive"] $ \subName -> do
+    forM_ ["input", "state", "tasks", "archive"] $ \subName ->
       liftBase $ createDirectoryIfMissingFS False $ planDir </> subName                                                  
 
 watch :: MonadCoordination b m => m (Watch b (Plan, ExecutionEnv))

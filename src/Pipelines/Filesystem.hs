@@ -97,7 +97,7 @@ strip ['/'] = []
 strip (c:cs) = c : strip cs
 
 stripSplitPath :: FilePath -> [String]
-stripSplitPath path = strip <$> (drop 1 (splitPath path))
+stripSplitPath path = strip <$> drop 1 (splitPath path)
 
 getEntityParts :: [String] -> FSEntity -> Maybe FSEntity
 getEntityParts [] e = Just e
@@ -243,5 +243,5 @@ instance MonadWatch IO where
   watchDir path pred fn = N.withManager $ \manager -> do
     chan <- newChan
     stop <- N.watchDirChan manager path (pred . eventToWatchEvent) chan
-    let list = (\e -> fn (eventToWatchEvent e)) <$> readChanToList chan
+    let list = fn . eventToWatchEvent <$> readChanToList chan
     return $ Watch list stop

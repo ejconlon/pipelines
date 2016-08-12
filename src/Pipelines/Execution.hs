@@ -125,6 +125,7 @@ class Monad b => MonadCommand b where
   command :: Action -> b Result
 
 instance (MonadCommand b, MonadFS b) => MonadRunner (ExecutionT b) where
+  -- TODO this should be smarter, cd into a dir and so on
   runner task = liftBase $ command (_taskAction task)
 
 runExecutionT :: ExecutionT b a -> ExecutionEnv -> b a
@@ -138,4 +139,4 @@ listExecutionT (ListT mStep) exEnv = ListT $ do
              Cons a rest -> Cons a $ listExecutionT rest exEnv
 
 execute :: (MonadCommand b, MonadFS b) => Plan -> ExecutionEnv -> ListT b (Name, Result)
-execute plan env = listExecutionT (unfoldPlan plan) env -- TODO we can get rid of uid
+execute = listExecutionT . unfoldPlan

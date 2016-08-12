@@ -66,7 +66,7 @@ expectRunner task = do
     Just r -> return r
 
 instance MonadRunner ExpectRunner where
-  runner task = expectRunner task
+  runner = expectRunner
 
 -- | A simple 3-task plan
 simplePlan :: Plan
@@ -94,7 +94,7 @@ testSimple = testCase "simple" $ do
   actual `isOk` expected
 
 startTime :: UTCTime
-startTime = UTCTime (toEnum 1) (fromIntegral 2)
+startTime = UTCTime (toEnum 1) 2
 
 runFS :: FakeFST (CatchT Identity) a -> FSDir -> Either SomeException (a, FSDir, [WatchEvent])
 runFS fst dir = runIdentity $ runCatchT $ runFakeFST fst startTime dir
