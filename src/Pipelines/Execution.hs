@@ -5,7 +5,11 @@
 {-# LANGUAGE MultiParamTypeClasses      #-}
 {-# LANGUAGE OverloadedStrings          #-}
 
-module Pipelines.Execution where
+module Pipelines.Execution
+  ( ExecutionEnv(..)
+  , History(..)
+  , execute
+  ) where
 
 import           Control.Monad.Base
 import           Control.Monad.IO.Class
@@ -64,7 +68,7 @@ instance A.ToJSON ExecutionState where
     , "histories" .= histories
     ]
 
-type MonadExecution b m = (Monad b, MonadFS b, Monad m, MonadBase b m,
+type MonadExecution b m = (Monad b, MonadFS b, MonadCommand b, Monad m, MonadBase b m,
                            MonadReader ExecutionEnv m)
 
 asksName :: MonadExecution b m => m Name
@@ -109,6 +113,10 @@ readState = do
     then A.decode <$> liftBase (readFileFS stateFile)
     else return Nothing
 
+-- TODO do real things like cd into dirs, pass args
+executionRunner :: MonadExecution b m => Task -> m Result
+executionRunner task = liftBase $ command $ _taskAction task
+
 newtype ExecutionT b a = ExecutionT
   { unExecutionT :: ReaderT ExecutionEnv b a
   } deriving (Functor, Applicative, Monad, MonadReader ExecutionEnv)
@@ -122,8 +130,7 @@ instance Monad b => MonadBase b (ExecutionT b) where
   liftBase = lift
 
 instance (MonadCommand b, MonadFS b) => MonadRunner (ExecutionT b) where
-  -- TODO this should be smarter, cd into a dir and so on
-  runner task = liftBase $ command (_taskAction task)
+  runner = executionRunner
 
 runExecutionT :: ExecutionT b a -> ExecutionEnv -> b a
 runExecutionT (ExecutionT e) = runReaderT e
