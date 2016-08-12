@@ -2,6 +2,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses      #-}
 
+-- | This module is a mess
 module Pipelines.Filesystem where
 
 import           Control.Concurrent.Chan
@@ -17,6 +18,7 @@ import qualified Data.Map.Strict          as M
 import           Data.Time.Clock
 import           Data.Typeable
 import           List.Transformer
+import           Pipelines.Common
 import           System.Directory
 import           System.FilePath.Posix
 import qualified System.FSNotify          as N
@@ -79,6 +81,7 @@ isFile _ = False
 emptyFSDir :: FSDir
 emptyFSDir = FSDir M.empty
 
+-- | Only supports writing file modifications now
 newtype FakeFST b a = FakeFST
   { unFakeFST :: RWST UTCTime [WatchEvent] FSDir b a
   } deriving (Functor, Applicative, Monad, MonadReader UTCTime, MonadState FSDir, MonadWriter [WatchEvent], MonadThrow)
@@ -206,16 +209,6 @@ data WatchEvent = WatchEvent
   , _watchEventTime :: UTCTime
   } deriving (Show, Eq)
 
-data Watch b c = Watch
-  { _watchEvents :: ListT b c
-  , _watchStop   :: b ()
-  }
-
--- TODO is <|> fair?
-instance Monad b => Monoid (Watch b c) where
-  mempty = Watch (ListT (return Nil)) (return ())
-  mappend (Watch e1 s1) (Watch e2 s2) = Watch (e1 <|> e2) (s1 >> s2)
-
 eventToWatchEvent :: N.Event -> WatchEvent
 eventToWatchEvent (N.Added p t) = WatchEvent AddedWatchEvent p t
 eventToWatchEvent (N.Modified p t) = WatchEvent ModifiedWatchEvent p t
@@ -227,14 +220,6 @@ watchEventToEvent (WatchEvent ty p t) =
     AddedWatchEvent -> N.Added p t
     ModifiedWatchEvent -> N.Modified p t
     RemovedWatchEvent -> N.Removed p t
-
-readChanToList :: Chan a -> ListT IO a
-readChanToList c = ListT $ do
-  value <- readChan c
-  return $ Cons value $ readChanToList c
-
-writeListToChan :: ListT IO a -> Chan a -> IO ()
-writeListToChan = undefined
 
 class MonadWatch b where
   watchDir :: FilePath -> (WatchEvent -> Bool) -> (WatchEvent -> c) -> b (Watch b c)
