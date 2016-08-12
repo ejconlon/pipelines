@@ -25,7 +25,9 @@ takeAllListT (ListT mStep) = do
 
 readChanToList :: Chan a -> ListT IO a
 readChanToList c = ListT $ do
+  putStrLn "reading chan"
   value <- readChan c
+  putStrLn "got value"
   return $ Cons value $ readChanToList c
 
 class Monad b => MonadCommand b where

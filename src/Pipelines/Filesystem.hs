@@ -1,8 +1,9 @@
 -- | This module is a mess
 module Pipelines.Filesystem where
 
+import           Control.Concurrent       (forkIO, killThread, threadDelay)
 import           Control.Concurrent.Chan
-import           Control.Monad            (unless)
+import           Control.Monad            (forever, unless)
 import           Control.Monad.Base
 import           Control.Monad.Catch
 import           Control.Monad.Reader
@@ -222,8 +223,12 @@ class MonadWatch b where
   watchDir :: FilePath -> (WatchEvent -> Bool) -> b (Watch b WatchEvent)
 
 instance MonadWatch IO where
-  watchDir path pred = N.withManager $ \manager -> do
+  watchDir path pred = do
+    putStrLn $ "watching " ++ path
     chan <- newChan
-    stop <- N.watchDirChan manager path (pred . eventToWatchEvent) chan
+    tid <- forkIO $ do
+      N.withManager $ \manager -> do
+        N.watchDirChan manager path (pred . eventToWatchEvent) chan
+        forever $ threadDelay 1000000
     let list = eventToWatchEvent <$> readChanToList chan
-    return $ Watch list stop
+    return $ Watch list (killThread tid)

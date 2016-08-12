@@ -81,7 +81,7 @@ convert (Options baseDir planFile) = do
     Nothing -> throwM $ FailedToDecode planFile
     Just plan -> return $ CoordinationEnv baseDir plan
 
-process :: (MonadFS m, MonadWatch m, MonadThrow m, MonadCommand m) =>
+process :: (MonadIO m, MonadFS m, MonadWatch m, MonadThrow m, MonadCommand m) =>
            CoordinationEnv -> m (Watch m (Plan, Task, Result))
 process (CoordinationEnv dir plans) = do
   Watch list stop <- coordinate dir plans
