@@ -60,7 +60,7 @@ opts =
     strOption (long "plan" <> metavar "PLAN" <> help "plan")
 
 instance MonadCommand IO where
-  command action = putStrLn (T.unpack action) >> return OkResult
+  command path action timeout = putStrLn (T.unpack action) >> return OkResult
   
 runLocal :: IO ()
 runLocal = execParser parser >>= convert >>= process >>= drain

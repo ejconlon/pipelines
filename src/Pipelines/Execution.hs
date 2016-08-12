@@ -7,6 +7,7 @@ module Pipelines.Execution
 import           Control.Monad.Base
 import           Control.Monad.IO.Class
 import           Control.Monad.Reader
+import           Control.Monad.State
 import           Data.Aeson             ((.:), (.=))
 import qualified Data.Aeson             as A
 import qualified Data.Aeson.Types       as A
@@ -63,29 +64,19 @@ instance A.ToJSON ExecutionState where
     ]
 
 type MonadExecution b m = (Monad b, MonadFS b, MonadCommand b, Monad m, MonadBase b m,
-                           MonadReader ExecutionEnv m)
-
-asksName :: MonadExecution b m => m Name
-asksName = do
-  input <- asks _executionEnvInput
-  return $ T.pack $ takeBaseName input
+                           MonadReader ExecutionEnv m, MonadState ExecutionState m)
 
 askStateFile :: MonadExecution b m => m FilePath
 askStateFile = do
   planDir <- asks _executionEnvPlanDir
-  name <- asksName
-  return $ planDir </> "state" </> T.unpack name </> ".json"
+  name <- gets _executionStateName
+  return $ planDir </> "state" </> T.unpack name ++ ".json"
 
-askTaskBaseDir :: MonadExecution b m => m FilePath
-askTaskBaseDir = do
+askExecutionDir :: MonadExecution b m => m FilePath
+askExecutionDir = do
   planDir <- asks _executionEnvPlanDir
-  return $ planDir </> "tasks"
-
-askTaskDir :: MonadExecution b m => Task -> m FilePath
-askTaskDir task = do
-  taskBase <- askTaskBaseDir
-  name <- asksName
-  return $ taskBase </> T.unpack name
+  name <- gets _executionStateName
+  return $ planDir </> "execution" </> T.unpack name
 
 askArchiveFile :: MonadExecution b m => m FilePath
 askArchiveFile = do
@@ -93,31 +84,49 @@ askArchiveFile = do
   input <- asks _executionEnvInput
   return $ replaceDirectory input $ planDir </> "archive"
 
-writeState :: MonadExecution b m => ExecutionState -> m ()
-writeState state = do
+writeState :: MonadExecution b m => m ()
+writeState = do
   stateFile <- askStateFile
+  state <- get
   let encoded = A.encode state
   liftBase $ writeFileFS stateFile encoded
 
-readState :: MonadExecution b m => m (Maybe ExecutionState)
-readState = do
-  stateFile <- askStateFile
-  exists <- liftBase $ doesFileExistFS stateFile
-  if exists
-    then A.decode <$> liftBase (readFileFS stateFile)
-    else return Nothing
+-- readState :: MonadExecution b m => m (Maybe ExecutionState)
+-- readState = do
+--   stateFile <- askStateFile
+--   exists <- liftBase $ doesFileExistFS stateFile
+--   if exists
+--     then A.decode <$> liftBase (readFileFS stateFile)
+--     else return Nothing
 
 -- TODO do real things like cd into dirs, pass args
 executionRunner :: MonadExecution b m => Task -> m Result
-executionRunner task = liftBase $ command $ _taskAction task
+executionRunner task = do
+  executionDir <- askExecutionDir
+  result <- liftBase $ command executionDir (_taskAction task) (_taskTimeout task)
+  state <- get
+  let histories = _executionStateHistories state
+      latestHistory = History (_taskName task) result
+      newHistories = latestHistory : histories
+      newState = state { _executionStateHistories = newHistories }
+  put newState
+  writeState
+  return result
+  
+setup :: MonadExecution b m => m ()
+setup = do
+  executionDir <- askExecutionDir
+  liftBase $ createDirectoryIfMissingFS False executionDir
+  -- TODO mv input to execution dir
+  writeState
 
 newtype ExecutionT b a = ExecutionT
-  { unExecutionT :: ReaderT ExecutionEnv b a
-  } deriving (Functor, Applicative, Monad, MonadReader ExecutionEnv)
+  { unExecutionT :: ReaderT ExecutionEnv (StateT ExecutionState b) a
+  } deriving (Functor, Applicative, Monad, MonadReader ExecutionEnv, MonadState ExecutionState)
 
 -- | Monad boilerplate
 instance MonadTrans ExecutionT where
-  lift = ExecutionT . lift
+  lift = ExecutionT . lift . lift
 
 -- | Monad boilerplate
 instance Monad b => MonadBase b (ExecutionT b) where
@@ -126,15 +135,24 @@ instance Monad b => MonadBase b (ExecutionT b) where
 instance (MonadCommand b, MonadFS b) => MonadRunner (ExecutionT b) where
   runner = executionRunner
 
-runExecutionT :: ExecutionT b a -> ExecutionEnv -> b a
-runExecutionT (ExecutionT e) = runReaderT e
+runExecutionT :: Monad b => ExecutionT b a -> ExecutionEnv -> ExecutionState -> b (a, ExecutionState)
+runExecutionT (ExecutionT e) env state = runStateT (runReaderT e env) state
 
-listExecutionT :: Monad b => ListT (ExecutionT b) a -> ExecutionEnv -> ListT b a
-listExecutionT (ListT mStep) exEnv = ListT $ do
-  step <- runExecutionT mStep exEnv
+listExecutionT :: Monad b => ListT (ExecutionT b) a -> ExecutionEnv -> ExecutionState -> ListT b a
+listExecutionT (ListT mStep) exEnv exState = ListT $ do
+  (step, exState') <- runExecutionT mStep exEnv exState
   return $ case step of
              Nil -> Nil
-             Cons a rest -> Cons a $ listExecutionT rest exEnv
+             Cons a rest -> Cons a $ listExecutionT rest exEnv exState'
+
+-- hacky, do `start` before yielding elements
+consEffect :: Monad m => m () -> ListT m a -> ListT m a
+consEffect start (ListT mStep)  = ListT $ do
+  start
+  mStep
 
 execute :: (MonadCommand b, MonadFS b) => Plan -> ExecutionEnv -> ListT b (Task, Result)
-execute = listExecutionT . unfoldPlan
+execute plan env = listExecutionT (consEffect setup (unfoldPlan plan)) env state
+  where
+    name = takeBaseName (_executionEnvInput env)
+    state = ExecutionState (T.pack name) []

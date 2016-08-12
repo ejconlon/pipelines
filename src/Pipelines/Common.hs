@@ -30,8 +30,9 @@ readChanToList c = ListT $ do
   putStrLn "got value"
   return $ Cons value $ readChanToList c
 
+-- | Run a command in the given working directory with the given timeout
 class Monad b => MonadCommand b where
-  command :: Action -> b Result
+  command :: FilePath -> Action -> Int -> b Result
 
 -- | The thing that actually runs tasks.
 -- Given a plan name and a stack of task results,
