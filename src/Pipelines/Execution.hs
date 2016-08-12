@@ -4,7 +4,6 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses      #-}
 {-# LANGUAGE OverloadedStrings          #-}
-{-# LANGUAGE TypeFamilies               #-}
 
 module Pipelines.Execution where
 
@@ -126,8 +125,7 @@ class Monad b => MonadCommand b where
   command :: Action -> b Result
 
 instance (MonadCommand b, MonadFS b) => MonadRunner (ExecutionT b) where
-  data Uid (ExecutionT b) = Unit
-  runner task _ = liftBase $ command (_taskAction task)
+  runner task = liftBase $ command (_taskAction task)
 
 runExecutionT :: ExecutionT b a -> ExecutionEnv -> b a
 runExecutionT (ExecutionT e) = runReaderT e
@@ -140,4 +138,4 @@ listExecutionT (ListT mStep) exEnv = ListT $ do
              Cons a rest -> Cons a $ listExecutionT rest exEnv
 
 execute :: (MonadCommand b, MonadFS b) => Plan -> ExecutionEnv -> ListT b (Name, Result)
-execute plan env = listExecutionT (unfoldPlan plan undefined) env -- TODO we can get rid of uid
+execute plan env = listExecutionT (unfoldPlan plan) env -- TODO we can get rid of uid

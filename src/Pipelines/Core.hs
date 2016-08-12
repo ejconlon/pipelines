@@ -132,14 +132,6 @@ data Position =
   | FailPos
   deriving (Show, Eq)
 
-data PlanEnv b = PlanEnv
-  { _planEnvPlan :: Plan
-  , _planEnvUid  :: Uid b
-  }
-
-deriving instance Show (Uid b) => Show (PlanEnv b)
-deriving instance Eq (Uid b) => Eq (PlanEnv b)
-
 -- | State relevant to the execution of a task
 data PlanState = PlanState
   { _planStatePosition :: Position
@@ -156,12 +148,11 @@ initialPlanState = PlanState StartPos
 -- A real implementation might work in IO over the filesystem.
 -- An implementation for tests might work over State and yield fake history.
 class Monad b => MonadRunner b where
-  data Uid b :: *
-  runner :: Task -> Uid b -> b Result
+  runner :: Task -> b Result
 
 -- | A typeclass to wrangle our Plan operations
 type MonadPlan b m = (MonadRunner b, MonadBase b m,
-                      MonadReader (PlanEnv b) m, MonadState PlanState m)
+                      MonadReader Plan m, MonadState PlanState m)
 
 -- | Finds a Task by name
 lookupTask :: Name -> [Task] -> Maybe Task
@@ -183,7 +174,7 @@ nextTaskAfter n (s:t:ss) | n == _taskName s = Just t
 
 -- | Are there any tasks in this Plan?
 isEmpty :: MonadPlan b m => m Bool
-isEmpty = null <$> asks (_planTasks . _planEnvPlan)
+isEmpty = null <$> asks _planTasks
 
 -- | Is this Plan failed or finished?
 isDone :: MonadPlan b m => m Bool
@@ -192,8 +183,8 @@ isDone = (\p -> p == EndPos || p == FailPos) <$> gets _planStatePosition
 -- | Updates our state to point to the next Task to be run
 advancePosition :: MonadPlan b m => m ()
 advancePosition = do
-  tasks <- asks $ _planTasks . _planEnvPlan
-  loop <- asks $ _planLoop . _planEnvPlan
+  tasks <- asks $ _planTasks
+  loop <- asks $ _planLoop
   position <- gets _planStatePosition
   case position of
     StartPos -> do
@@ -224,7 +215,7 @@ normalizePosition = do
 -- | Finds the current task
 currentTask :: MonadPlan b m => m (Maybe Task)
 currentTask = do
-  tasks <- asks $ _planTasks . _planEnvPlan
+  tasks <- asks $ _planTasks
   position <- gets _planStatePosition
   return $ case position of
              StartPos -> Nothing
@@ -234,9 +225,7 @@ currentTask = do
 -- | Runs the given Task and updates state
 runTask :: MonadPlan b m => Task -> m (Name, Result)
 runTask task = do
-  plan <- asks _planEnvPlan
-  uid <- asks _planEnvUid
-  result <- liftBase $ runner task uid
+  result <- liftBase $ runner task
   case result of
     FailResult -> modify (\s -> s { _planStatePosition = FailPos })
     OkResult -> advancePosition
@@ -263,8 +252,8 @@ walk = ListT $ do
 
 -- | A concrete interpretation of `MonadPlan`
 newtype PlanT b a = PlanT
-  { unPlanT :: ReaderT (PlanEnv b) (StateT PlanState b) a }
-  deriving (Functor, Applicative, Monad, MonadReader (PlanEnv b),
+  { unPlanT :: ReaderT Plan (StateT PlanState b) a }
+  deriving (Functor, Applicative, Monad, MonadReader Plan,
             MonadState PlanState)
 
 -- | Monad boilerplate
@@ -276,21 +265,22 @@ instance Monad b => MonadBase b (PlanT b) where
   liftBase = lift
 
 -- | Monad boilerplate
-runPlanT :: PlanT b a -> PlanEnv b -> PlanState -> b (a, PlanState)
+runPlanT :: PlanT b a -> Plan -> PlanState -> b (a, PlanState)
 runPlanT (PlanT x) = runStateT . runReaderT x
 
 -- | Projects `PlanT b` actions in the list transformer to the base monad
-listPlanT :: Monad b => ListT (PlanT b) a -> PlanEnv b -> PlanState -> ListT b a
-listPlanT (ListT mStep) planEnv state = ListT $ do
-  (step, state') <- runPlanT mStep planEnv state
+listPlanT :: Monad b => ListT (PlanT b) a -> Plan -> PlanState -> ListT b a
+listPlanT (ListT mStep) plan state = ListT $ do
+  (step, state') <- runPlanT mStep plan state
   return $ case step of
              Nil -> Nil
-             Cons a rest -> Cons a $ listPlanT rest planEnv state'
+             Cons a rest -> Cons a $ listPlanT rest plan state'
 
 -- | Unfolds a Plan into a sequence of Task-execution actions that yield History
-unfoldPlan :: MonadRunner b => Plan -> Uid b -> ListT b (Name, Result)
-unfoldPlan plan uid = listPlanT walk (PlanEnv plan uid) initialPlanState
+unfoldPlan :: MonadRunner b => Plan -> ListT b (Name, Result)
+unfoldPlan plan = listPlanT walk plan initialPlanState
 
+-- TODO move this out
 -- | Takes at most `n` elements from the ListT (blocks and returns all `n` at once)
 takeListT :: Monad b => Int -> ListT b a -> b [a]
 takeListT n (ListT mStep) =
@@ -302,10 +292,12 @@ takeListT n (ListT mStep) =
         Nil -> return []
         Cons a rest -> (a:) <$> takeListT (n - 1) rest
 
+-- TODO rm this
 -- | Takes at most `n` elements from the Plan execution (blocks and returns all `n` at once)
-takePlan :: MonadRunner b => Int -> Plan -> Uid b -> b [(Name, Result)]
-takePlan n plan uid = takeListT n $ unfoldPlan plan uid
+takePlan :: MonadRunner b => Int -> Plan ->  b [(Name, Result)]
+takePlan n plan = takeListT n $ unfoldPlan plan
 
+-- TODO move this out
 -- | Takes all elements from the ListT (blocks and returns all at once, if at all)
 takeAllListT :: Monad b => ListT b a -> b [a]
 takeAllListT (ListT mStep) = do
@@ -314,10 +306,12 @@ takeAllListT (ListT mStep) = do
     Nil -> return []
     Cons a rest -> (a:) <$> takeAllListT rest
 
+-- TODO rm this
 -- | Takes all elements from the Plan execution (blocks and returns all at once, if at all)
-takeAllPlan :: MonadRunner b => Plan -> Uid b -> b [(Name, Result)]
-takeAllPlan plan uid = takeAllListT $ unfoldPlan plan uid
+takeAllPlan :: MonadRunner b => Plan -> b [(Name, Result)]
+takeAllPlan plan = takeAllListT $ unfoldPlan plan
 
+-- TODO rm this
 -- | Executes a Plan, discarding the result. May never return.
-executePlan :: MonadRunner b => Plan -> Uid b -> b ()
-executePlan plan uid = runListT $ unfoldPlan plan uid
+executePlan :: MonadRunner b => Plan -> b ()
+executePlan plan = runListT $ unfoldPlan plan

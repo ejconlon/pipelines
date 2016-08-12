@@ -66,8 +66,7 @@ expectRunner task = do
     Just r -> return r
 
 instance MonadRunner ExpectRunner where
-  data Uid ExpectRunner = Unit
-  runner task Unit = expectRunner task
+  runner task = expectRunner task
 
 -- | A simple 3-task plan
 simplePlan :: Plan
@@ -90,7 +89,7 @@ testSimple = testCase "simple" $ do
         , ("taskB", OkResult)
         , ("taskC", OkResult)
         ]
-      taken = takeAllPlan simplePlan Unit
+      taken = takeAllPlan simplePlan
       actual = runExpect taken config
   actual `isOk` expected
 
