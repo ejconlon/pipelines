@@ -68,21 +68,14 @@ type MonadExecution b m = (Monad b, MonadFS b, MonadCommand b, Monad m, MonadBas
 
 askStateFile :: MonadExecution b m => m FilePath
 askStateFile = do
-  planDir <- asks _executionEnvPlanDir
-  name <- gets _executionStateName
-  return $ planDir </> "state" </> T.unpack name ++ ".json"
+  execDir <- askExecutionDir
+  return $ execDir </> "state.json"
 
 askExecutionDir :: MonadExecution b m => m FilePath
 askExecutionDir = do
   planDir <- asks _executionEnvPlanDir
   name <- gets _executionStateName
   return $ planDir </> "execution" </> T.unpack name
-
-askArchiveFile :: MonadExecution b m => m FilePath
-askArchiveFile = do
-  planDir <- asks _executionEnvPlanDir
-  input <- asks _executionEnvInput
-  return $ replaceDirectory input $ planDir </> "archive"
 
 writeState :: MonadExecution b m => m ()
 writeState = do
@@ -91,15 +84,6 @@ writeState = do
   let encoded = A.encode state
   liftBase $ writeFileFS stateFile encoded
 
--- readState :: MonadExecution b m => m (Maybe ExecutionState)
--- readState = do
---   stateFile <- askStateFile
---   exists <- liftBase $ doesFileExistFS stateFile
---   if exists
---     then A.decode <$> liftBase (readFileFS stateFile)
---     else return Nothing
-
--- TODO do real things like cd into dirs, pass args
 executionRunner :: MonadExecution b m => Task -> m Result
 executionRunner task = do
   executionDir <- askExecutionDir

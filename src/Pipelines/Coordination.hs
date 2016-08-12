@@ -30,7 +30,7 @@ initializeDirs = do
   plan <- asks _coordinationEnvPlan
   let planDir = (baseDir </>) . T.unpack . _planName $ plan
   liftBase $ createDirectoryIfMissingFS False planDir
-  forM_ ["input", "state", "execution", "archive"] $ \subName ->
+  forM_ ["input", "execution"] $ \subName ->
     liftBase $ createDirectoryIfMissingFS False $ planDir </> subName
 
 watch :: MonadCoordination b m => m (Watch b (Plan, ExecutionEnv))
