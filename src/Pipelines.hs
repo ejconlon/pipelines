@@ -1,5 +1,6 @@
 module Pipelines (module X) where
 
+import Pipelines.Command      as X
 import Pipelines.Common       as X
 import Pipelines.Coordination as X
 import Pipelines.Core         as X

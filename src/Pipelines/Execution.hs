@@ -17,6 +17,7 @@ import qualified Data.ByteString.Lazy   as BL
 import qualified Data.Set               as S
 import qualified Data.Text              as T
 import           List.Transformer
+import           Pipelines.Command
 import           Pipelines.Core
 import           Pipelines.Filesystem
 import           System.FilePath
@@ -119,10 +120,6 @@ instance MonadTrans ExecutionT where
 -- | Monad boilerplate
 instance Monad b => MonadBase b (ExecutionT b) where
   liftBase = lift
-
--- TODO
-class Monad b => MonadCommand b where
-  command :: Action -> b Result
 
 instance (MonadCommand b, MonadFS b) => MonadRunner (ExecutionT b) where
   -- TODO this should be smarter, cd into a dir and so on
