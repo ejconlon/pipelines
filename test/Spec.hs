@@ -89,7 +89,7 @@ testSimple = testCase "simple" $ do
         , ("taskB", OkResult)
         , ("taskC", OkResult)
         ]
-      taken = takeAllPlan simplePlan
+      taken = takeAllListT $ unfoldPlan simplePlan
       actual = runExpect taken config
   actual `isOk` expected
 

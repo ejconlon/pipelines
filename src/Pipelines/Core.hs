@@ -20,9 +20,6 @@ module Pipelines.Core
   , Loop(..)
   , Plan(..)
   , unfoldPlan
-  , takePlan
-  , takeAllPlan
-  , executePlan
   ) where
 
 import           Control.Exception
@@ -279,39 +276,3 @@ listPlanT (ListT mStep) plan state = ListT $ do
 -- | Unfolds a Plan into a sequence of Task-execution actions that yield History
 unfoldPlan :: MonadRunner b => Plan -> ListT b (Name, Result)
 unfoldPlan plan = listPlanT walk plan initialPlanState
-
--- TODO move this out
--- | Takes at most `n` elements from the ListT (blocks and returns all `n` at once)
-takeListT :: Monad b => Int -> ListT b a -> b [a]
-takeListT n (ListT mStep) =
-  if n <= 0
-    then return []
-    else do
-      step <- mStep
-      case step of
-        Nil -> return []
-        Cons a rest -> (a:) <$> takeListT (n - 1) rest
-
--- TODO rm this
--- | Takes at most `n` elements from the Plan execution (blocks and returns all `n` at once)
-takePlan :: MonadRunner b => Int -> Plan ->  b [(Name, Result)]
-takePlan n plan = takeListT n $ unfoldPlan plan
-
--- TODO move this out
--- | Takes all elements from the ListT (blocks and returns all at once, if at all)
-takeAllListT :: Monad b => ListT b a -> b [a]
-takeAllListT (ListT mStep) = do
-  step <- mStep
-  case step of
-    Nil -> return []
-    Cons a rest -> (a:) <$> takeAllListT rest
-
--- TODO rm this
--- | Takes all elements from the Plan execution (blocks and returns all at once, if at all)
-takeAllPlan :: MonadRunner b => Plan -> b [(Name, Result)]
-takeAllPlan plan = takeAllListT $ unfoldPlan plan
-
--- TODO rm this
--- | Executes a Plan, discarding the result. May never return.
-executePlan :: MonadRunner b => Plan -> b ()
-executePlan plan = runListT $ unfoldPlan plan
